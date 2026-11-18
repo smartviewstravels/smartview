@@ -35,12 +35,8 @@ export async function POST(request: Request) {
     store.listExpenses(),
   ]);
 
-  // withTotals types its customer map loosely ({ name } & Record);
-  // Customer satisfies it at runtime — cast at the boundary (lib is frozen).
-  const customersById = new Map(
-    customers.map(
-      (c) => [c.id, c as unknown as { name: string } & Record<string, unknown>],
-    ),
+  const customersById = new Map<string, (typeof customers)[number]>(
+    customers.map((c) => [c.id, c] as const),
   );
   const paymentsByRecord = new Map<string, typeof payments>();
   for (const p of payments) {

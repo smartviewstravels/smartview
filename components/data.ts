@@ -38,16 +38,7 @@ export async function loadAll(type?: FinanceType): Promise<LoadedData> {
     paymentsByRecord.set(p.finance_record_id, list);
   }
 
-  // withTotals types its customer map loosely; Customer carries the same
-  // fields at runtime, so the cast is safe.
-  const records = withTotals(
-    rawRecords,
-    customersById as unknown as Map<
-      string,
-      { name: string } & Record<string, unknown>
-    >,
-    paymentsByRecord,
-  );
+  const records = withTotals(rawRecords, customersById, paymentsByRecord);
 
   return { customers, records, payments, expenses };
 }

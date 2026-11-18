@@ -8,6 +8,7 @@
 //   pending is NEVER counted as profit.
 
 import type {
+  Customer,
   Expense,
   FinanceRecord,
   FinanceType,
@@ -50,11 +51,15 @@ export function isFullyPaid(
 /** Join records with customers + payments and attach received/pending. */
 export function withTotals(
   records: FinanceRecord[],
-  customersById: Map<string, { name: string } & Record<string, unknown>>,
+  customersById: Map<string, Customer>,
   paymentsByRecord: Map<string, Payment[]>,
 ): RecordWithTotals[] {
   return records.map((record) => {
-    const customer = customersById.get(record.customer_id) as never;
+    const customer = customersById.get(record.customer_id);
+    if (!customer)
+      throw new Error(
+        `Finance record ${record.id} has no customer (${record.customer_id}).`,
+      );
     const payments = (paymentsByRecord.get(record.id) ?? []).slice().sort(
       (a, b) => (a.payment_date < b.payment_date ? 1 : -1),
     );
