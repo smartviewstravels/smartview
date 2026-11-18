@@ -103,12 +103,14 @@ wipe `data/db.json` and re-seed. `npm run verify` moves your real
 
 ## Known gaps
 
-- (Coordinator to finalize — placeholders, not yet verified against the
-  live app.)
 - Live end-to-end check against a real Supabase project still pending
-  (seed → sale → invoice-style record flow, login, chatbot answers).
-- T14 screenshot sweep (360px–1440px, all pages) still pending.
+  (no project exists yet — SQL file verified by reading only).
+- T14 screenshot sweep done 2026-11-19 by the tester: 22 screenshots
+  (11 pages × 1440px + 390px) in `/tmp/tt-screenshots/`, zero page
+  overflow at 390px; the one cosmetic defect found (record-detail stat
+  wrap) was fixed and re-verified live the same day.
 - No receipt upload, no data import, no SMS/WhatsApp/email reminders
   (all excluded in v1 by design).
 - `confirm` / `cancel` of a record is not a DB transaction across
   tables in the local JSON backend (single-file writes only).
+- 320px width was not checked (contract range is 360–1440px).

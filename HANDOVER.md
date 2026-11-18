@@ -13,8 +13,9 @@ extracted text at `/tmp/tt-guide.txt`). Build contract:
 | Server actions (`app/actions/finance.ts`, `app/actions/auth.ts`) | Done — see below |
 | Chat API (`app/api/chat/route.ts`) | Done — read-only, session required |
 | Seed (`scripts/seed.mjs`) | Done — fake demo data only |
-| Acceptance (`scripts/verify-acceptance.mjs`) | Done — T01–T13 green, 30/30 checks |
-| Pages (`/`, `/login`, `/tickets`, `/umrah`, `/combined`, `/tours`, `/records/[id]`, `/expenses`, `/profit-loss`, `/chat`, `/customers`, layout/nav) | UI agent — in progress in parallel |
+| Acceptance (`scripts/verify-acceptance.mjs`) | Done — T01–T13 green, 32/32 checks (incl. 2 status-sync checks) |
+| Pages (`/`, `/login`, `/tickets`, `/umrah`, `/combined`, `/tours`, `/records/[id]`, `/expenses`, `/profit-loss`, `/chat`, `/customers`, layout/nav) | Done — all 11 routes built, verified live (T01–T14 PASS) |
+| Tester verification | Done 2026-11-19 — T01–T14 all PASS live; 3 findings fixed same day (see Known gaps) |
 | Docs (README, this file) | Done (this version) |
 
 ## What the backend work did
@@ -77,16 +78,23 @@ extracted text at `/tmp/tt-guide.txt`). Build contract:
 
 ## Known gaps
 
-- (Coordinator to finalize.)
-- Live Supabase end-to-end check still pending (see README).
-- T14 screenshot sweep still pending.
-- Pages are the UI agent's work — server actions were written against
-  the contract's form field names; if the UI uses different names, the
-  actions' field readers are the place to reconcile, not the store.
+- Live Supabase end-to-end check still pending — no Supabase project
+  exists yet. The SQL file was verified by reading only (columns match
+  the app's queries); run it and re-check login + a full record flow
+  once the project exists.
 - The local JSON backend is single-file read/write, not transactional
   across tables.
 - `data/db.json` is gitignored demo data; never commit it, never put
   real customer data in it.
+- 320px width was not screenshot-checked (contract range 360–1440px;
+  390px verified, zero overflow).
+- Tester findings, all fixed 2026-11-19 (verified live after the fix):
+  lint error in `RecordForm.tsx` (set-state inside `useEffect`) — fixed
+  with a plain submit handler; record-detail stat values wrapped
+  mid-number at 390px (inline 3-column grid overrode the mobile
+  2-column rule) — inline style removed; `finance_records.status`
+  never became `paid` — `addPayment`/`voidPayment` now sync it to
+  `paid`/`open` in both backends, covered by 2 new acceptance checks.
 
 ## Still needed from the user / client
 
