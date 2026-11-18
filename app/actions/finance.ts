@@ -1,0 +1,288 @@
+'use server';
+
+// Server actions for TT Travel & Tour Finance.
+// Every action: requireAdmin() first, validate inputs, return
+// { ok, error? } (never throw user-facing errors), revalidatePath the
+// affected pages. Overpayment blocking lives in the store — its error
+// message is surfaced unchanged.
+
+import { revalidatePath } from "next/cache";
+import { getStore } from "@/lib/store";
+import { requireAdmin } from "@/lib/auth";
+import { todayPKT } from "@/lib/format";
+import {
+  EXPENSE_CATEGORIES,
+  FINANCE_TYPES,
+  PAYMENT_METHODS,
+  type ExpenseCategory,
+  type FinanceType,
+  type PaymentMethod,
+} from "@/lib/types";
+
+export interface ActionResult {
+  ok: boolean;
+  error?: string;
+  /** Id of the created record/customer/payment, when one was created. */
+  id?: string;
+}
+
+function fail(error: string): ActionResult {
+  return { ok: false, error };
+}
+
+function str(formData: FormData, key: string): string {
+  const v = formData.get(key);
+  return typeof v === "string" ? v.trim() : "";
+}
+
+function num(formData: FormData, key: string): number {
+  return Number(str(formData, key));
+}
+
+function isDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(value + "T12:00:00");
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "Something went wrong.";
+}
+
+/** Revalidate every page that shows this record type. */
+function revalidateRecordPages(type: FinanceType, recordId?: string): void {
+  const listPath =
+    type === "ticket"
+      ? "/tickets"
+      : type === "umrah"
+        ? "/umrah"
+        : type === "combined"
+          ? "/combined"
+          : "/tours";
+  revalidatePath("/");
+  revalidatePath(listPath);
+  revalidatePath("/profit-loss");
+  revalidatePath("/customers");
+  if (recordId) revalidatePath(`/records/${recordId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Customers
+// ---------------------------------------------------------------------------
+
+export async function createCustomer(
+  formData: FormData,
+): Promise<ActionResult> {
+  await requireAdmin();
+  const name = str(formData, "name");
+  if (!name) return fail("Customer name is required.");
+  try {
+    const customer = await getStore().createCustomer({
+      name,
+      phone: str(formData, "phone") || null,
+      cnic_passport: str(formData, "cnic_passport") || null,
+    });
+    revalidatePath("/customers");
+    revalidatePath("/");
+    return { ok: true, id: customer.id };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Records
+// ---------------------------------------------------------------------------
+//
+// Form fields (the record pages use these names):
+//   customer_id | new_customer_name, new_customer_phone, new_customer_cnic
+//   type, total_amount | umrah_amount + ticket_amount (combined),
+//   tour_name (tours), next_payment_date (YYYY-MM-DD, optional)
+
+export async function createRecord(formData: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const type = str(formData, "type") as FinanceType;
+  if (!FINANCE_TYPES.includes(type)) return fail("Please choose a service type.");
+
+  const nextPaymentDate = str(formData, "next_payment_date");
+  if (nextPaymentDate && !isDate(nextPaymentDate)) {
+    return fail("Next payment date must be a valid date.");
+  }
+
+  try {
+    const store = getStore();
+
+    // Customer: existing id OR a new name (created inline).
+    let customerId = str(formData, "customer_id");
+    if (customerId) {
+      const existing = await store.getCustomer(customerId);
+      if (!existing) return fail("Selected customer not found.");
+    } else {
+      const newName = str(formData, "new_customer_name");
+      if (!newName) {
+        return fail("Choose a customer or enter a new customer name.");
+      }
+      const created = await store.createCustomer({
+        name: newName,
+        phone: str(formData, "new_customer_phone") || null,
+        cnic_passport: str(formData, "new_customer_cnic") || null,
+      });
+      customerId = created.id;
+    }
+
+    if (type === "tour" && !str(formData, "tour_name")) {
+      return fail("Tour / city name is required.");
+    }
+
+    if (type === "combined") {
+      const umrah = num(formData, "umrah_amount");
+      const ticket = num(formData, "ticket_amount");
+      if (!Number.isFinite(umrah) || !Number.isFinite(ticket)) {
+        return fail("Umrah and ticket amounts must be numbers.");
+      }
+      if (umrah < 0 || ticket < 0) return fail("Amounts cannot be negative.");
+      if (umrah + ticket <= 0) {
+        return fail("Combined total must be more than zero.");
+      }
+      const record = await store.createRecord({
+        customer_id: customerId,
+        type,
+        total_amount: umrah + ticket,
+        umrah_amount: umrah,
+        ticket_amount: ticket,
+        next_payment_date: nextPaymentDate || null,
+      });
+      revalidateRecordPages(type, record.id);
+      return { ok: true, id: record.id };
+    }
+
+    const total = num(formData, "total_amount");
+    if (!Number.isFinite(total) || total <= 0) {
+      return fail("Total amount must be more than zero.");
+    }
+    const record = await store.createRecord({
+      customer_id: customerId,
+      type,
+      tour_name: type === "tour" ? str(formData, "tour_name") : null,
+      total_amount: total,
+      next_payment_date: nextPaymentDate || null,
+    });
+    revalidateRecordPages(type, record.id);
+    return { ok: true, id: record.id };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Payments
+// ---------------------------------------------------------------------------
+
+export async function addPayment(formData: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const recordId = str(formData, "finance_record_id") || str(formData, "record_id");
+  if (!recordId) return fail("Record is required.");
+  const amount = num(formData, "amount");
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return fail("Payment amount must be more than zero.");
+  }
+  const paymentDate = str(formData, "payment_date") || todayPKT();
+  if (!isDate(paymentDate)) return fail("Payment date must be a valid date.");
+  const method = str(formData, "method") as PaymentMethod;
+  if (method && !PAYMENT_METHODS.includes(method)) {
+    return fail("Please choose a valid payment method.");
+  }
+  try {
+    const store = getStore();
+    const record = await store.getRecord(recordId);
+    if (!record) return fail("Record not found.");
+    // The store throws on overpayment — surface its message as-is.
+    const payment = await store.addPayment({
+      finance_record_id: recordId,
+      amount,
+      payment_date: paymentDate,
+      method: method || null,
+      reference: str(formData, "reference") || null,
+      note: str(formData, "note") || null,
+    });
+    revalidateRecordPages(record.type, recordId);
+    return { ok: true, id: payment.id };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
+
+export async function voidPayment(formData: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const paymentId = str(formData, "payment_id") || str(formData, "id");
+  if (!paymentId) return fail("Payment is required.");
+  const reason = str(formData, "reason") || str(formData, "void_reason");
+  if (!reason) return fail("A reason is required to void a payment.");
+  try {
+    const store = getStore();
+    const all = await store.listPayments();
+    const payment = all.find((p) => p.id === paymentId);
+    if (!payment) return fail("Payment not found.");
+    await store.voidPayment(paymentId, reason);
+    const record = await store.getRecord(payment.finance_record_id);
+    if (record) revalidateRecordPages(record.type, record.id);
+    else {
+      revalidatePath("/");
+      revalidatePath("/profit-loss");
+    }
+    return { ok: true };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
+
+export async function updateDueDate(formData: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const recordId = str(formData, "finance_record_id") || str(formData, "record_id");
+  if (!recordId) return fail("Record is required.");
+  const date = str(formData, "next_payment_date");
+  if (date && !isDate(date)) return fail("Date must be a valid date.");
+  try {
+    const store = getStore();
+    const record = await store.updateRecordDueDate(recordId, date || null);
+    revalidateRecordPages(record.type, record.id);
+    return { ok: true };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Expenses
+// ---------------------------------------------------------------------------
+
+export async function addExpense(formData: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const name = str(formData, "name");
+  if (!name) return fail("Expense name is required.");
+  const amount = num(formData, "amount");
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return fail("Expense amount must be more than zero.");
+  }
+  const expenseDate = str(formData, "expense_date") || todayPKT();
+  if (!isDate(expenseDate)) return fail("Expense date must be a valid date.");
+  const category = str(formData, "category") as ExpenseCategory;
+  if (!EXPENSE_CATEGORIES.includes(category)) {
+    return fail("Please choose a valid category.");
+  }
+  try {
+    const expense = await getStore().addExpense({
+      name,
+      amount,
+      expense_date: expenseDate,
+      category,
+      description: str(formData, "description") || null,
+    });
+    revalidatePath("/expenses");
+    revalidatePath("/");
+    revalidatePath("/profit-loss");
+    return { ok: true, id: expense.id };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
