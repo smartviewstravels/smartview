@@ -59,8 +59,10 @@ extracted text at `/tmp/tt-guide.txt`). Build contract:
   temp dir. No logic is duplicated; the tests exercise the real store,
   calc and chatbot. `package.json` needed no change — `npm run verify`
   already points at `scripts/verify-acceptance.mjs`.
-- Typecheck: `npx tsc --noEmit` — (result recorded by the backend agent
-  at commit time; UI pages did not exist yet, so the build was not run).
+- Typecheck: `npx tsc --noEmit` passes clean (checked at commit time,
+  with the UI agent's pages present). `npm run build` was not run —
+  pages were still landing in parallel; the tester should run it once
+  the UI is complete.
 
 ## Safe defaults applied (guide §9)
 
