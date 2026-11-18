@@ -1,19 +1,10 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useState } from "react";
 import { createRecord } from "@/app/actions/finance";
 import type { Customer, FinanceType } from "@/lib/types";
 import { FINANCE_TYPE_LABELS } from "@/lib/types";
 import { todayPKT } from "@/lib/format";
-
-type FormState = { ok: boolean; error?: string };
-
-async function submitRecord(
-  _prev: FormState,
-  formData: FormData,
-): Promise<FormState> {
-  return createRecord(formData);
-}
 
 interface RecordFormProps {
   type: FinanceType;
@@ -33,14 +24,19 @@ export default function RecordForm({ type, customers }: RecordFormProps) {
   );
   const [umrahAmount, setUmrahAmount] = useState("");
   const [ticketAmount, setTicketAmount] = useState("");
-  const [state, formAction, pending] = useActionState<FormState, FormData>(
-    submitRecord,
-    { ok: false },
-  );
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
-  useEffect(() => {
-    if (state.ok) setOpen(false);
-  }, [state.ok]);
+  // Plain client-side submit: no useEffect, so the modal closes here on
+  // success and the error stays visible on failure.
+  async function handleSubmit(formData: FormData): Promise<void> {
+    setPending(true);
+    setError(null);
+    const result = await createRecord(formData);
+    setPending(false);
+    if (result.ok) setOpen(false);
+    else setError(result.error ?? "Could not save the record.");
+  }
 
   const combinedTotal =
     (Number(umrahAmount) || 0) + (Number(ticketAmount) || 0);
@@ -69,9 +65,9 @@ export default function RecordForm({ type, customers }: RecordFormProps) {
               </button>
             </div>
 
-            {state.error && <p className="error">{state.error}</p>}
+            {error && <p className="error">{error}</p>}
 
-            <form action={formAction}>
+            <form action={handleSubmit}>
               <input type="hidden" name="type" value={type} />
 
               <div className="field">

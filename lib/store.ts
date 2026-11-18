@@ -260,6 +260,7 @@ class LocalStore implements Store {
       created_at: nowISO(),
     };
     db.payments.push(payment);
+    syncRecordStatus(db, record);
     await writeLocalDb(db);
     return payment;
   }
@@ -274,6 +275,10 @@ class LocalStore implements Store {
     payment.status = "voided";
     payment.void_reason = reason.trim();
     payment.voided_at = nowISO();
+    const record = db.finance_records.find(
+      (r) => r.id === payment.finance_record_id,
+    );
+    if (record) syncRecordStatus(db, record);
     await writeLocalDb(db);
     return payment;
   }
@@ -313,6 +318,17 @@ class LocalStore implements Store {
     const db = await readLocalDb();
     return db.profiles.slice();
   }
+}
+
+/** Keep finance_records.status in step with the balance: 'paid' when the
+ *  remaining balance is zero, 'open' otherwise (e.g. after a void). */
+function syncRecordStatus(db: LocalDb, record: FinanceRecord): void {
+  const payments = db.payments.filter(
+    (p) => p.finance_record_id === record.id,
+  );
+  const remaining = record.total_amount - sumActivePayments(payments);
+  record.status = remaining === 0 ? "paid" : "open";
+  record.updated_at = nowISO();
 }
 
 /** Shared record-building + validation used by both backends. */
@@ -511,6 +527,7 @@ class SupabaseStore implements Store {
       .select("*")
       .single();
     if (error) throw new Error(error.message);
+    await this.syncStatus(record.id);
     return row as Payment;
   }
 
@@ -537,7 +554,24 @@ class SupabaseStore implements Store {
       .select("*")
       .single();
     if (error) throw new Error(error.message);
+    await this.syncStatus((row as Payment).finance_record_id);
     return row as Payment;
+  }
+
+  /** 'paid' when the remaining balance is zero, 'open' otherwise. */
+  private async syncStatus(recordId: string): Promise<void> {
+    const record = await this.getRecord(recordId);
+    if (!record) return;
+    const payments = await this.listPayments(recordId);
+    const remaining = record.total_amount - sumActivePayments(payments);
+    const { error } = await supabaseAdmin()
+      .from("finance_records")
+      .update({
+        status: remaining === 0 ? "paid" : "open",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", recordId);
+    if (error) throw new Error(error.message);
   }
 
   async listExpenses(): Promise<Expense[]> {

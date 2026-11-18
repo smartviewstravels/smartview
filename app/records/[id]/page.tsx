@@ -45,7 +45,7 @@ export default async function RecordDetailPage({
         {customer?.name ?? "Unknown customer"} — {FINANCE_TYPE_LABELS[record.type]}
       </h1>
 
-      <div className="stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+      <div className="stat-grid">
         <div className="card">
           <div className="stat-label">Total</div>
           <div className="stat-value">{formatPKR(record.total_amount)}</div>

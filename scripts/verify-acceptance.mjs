@@ -216,6 +216,8 @@ async function main() {
     check("Void restores pending", f.pending, 50000);
     const voidedRow = (await store.listPayments(voidRec.id)).find((p) => p.id === voidPay.id);
     check("Voided row kept with status voided", voidedRow.status, "voided");
+    const voidRecAfter = await store.getRecord(voidRec.id);
+    check("Voided record status back to open", voidRecAfter.status, "open");
 
     // T03 — due date + balance -> in reminders.
     let snap = await snapshot();
@@ -225,10 +227,12 @@ async function main() {
       true,
     );
 
-    // T04 — full payment -> pending 0, reminder gone.
+    // T04 — full payment -> pending 0, reminder gone, status paid.
     await store.addPayment({ finance_record_id: ticket.id, amount: 40000, payment_date: today, method: "Cash" });
     f = await figures(ticket.id);
     check("T04 ticket pending after full payment", f.pending, 0);
+    const ticketAfterFull = await store.getRecord(ticket.id);
+    check("T04 ticket status paid after full payment", ticketAfterFull.status, "paid");
     snap = await snapshot();
     check(
       "T04 ticket gone from reminders",
