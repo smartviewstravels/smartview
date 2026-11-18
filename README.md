@@ -1,36 +1,114 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TT Travel & Tour Finance
 
-## Getting Started
+Finance system for a travel & tour agency — Ticket, Umrah, Umrah + Ticket
+(combined), Tours, Daily Expenses, Profit & Loss, a read-only AI chatbot,
+and a Dashboard with payment reminders. Built to the Tricky Tech developer
+guidelines (guide §1–§9).
 
-First, run the development server:
+Stack: Next.js 16.4.6 (App Router) + React 19 + Tailwind 4, Supabase
+(`@supabase/supabase-js`). Node 24, npm. No RLS — app-level checks only
+(single admin login).
+
+## Quick start (local demo)
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run seed     # fake demo data only — see below
+npm run dev      # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Local demo login (local mode only, when Supabase is NOT configured):
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Email: `admin@demo.local`
+- Password: `demo1234`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The demo login only exists in the local JSON database (`data/db.json`,
+gitignored). It never works against Supabase.
 
-## Learn More
+## Env (3 values, in `.env.local` — gitignored)
 
-To learn more about Next.js, take a look at the following resources:
+| Variable | What it is |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon / publishable key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key (server only, never expose) |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+With none of these set, the app runs on the local JSON store
+(`data/db.json`). With the URL + service-role key set, it uses Supabase.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Scripts
 
-## Deploy on Vercel
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Start the dev server |
+| `npm run build` | Production build |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint |
+| `npm run seed` | Seed clearly-fake demo data into `data/db.json` |
+| `npm run verify` | Acceptance tests T01–T13 against a fresh temp DB |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+`npm run seed` refuses to run twice — use `npm run seed -- --force` to
+wipe `data/db.json` and re-seed. `npm run verify` moves your real
+`data/db.json` aside, runs the tests on a fresh temp DB, then restores it.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## How it works
+
+- **Data layer** — `lib/store.ts`: one `Store` interface, two backends
+  (Supabase when env is set, local JSON otherwise). Same shapes, same
+  rules. Overpayment blocking is enforced inside `addPayment` in both
+  backends — no UI path can bypass it.
+- **Maths** — `lib/calc.ts`: received = sum of ACTIVE payments only
+  (voided excluded); pending = total − received; profit = total received
+  − total expenses. Pending is NEVER counted as profit.
+- **Server actions** — `app/actions/finance.ts` (`createCustomer`,
+  `createRecord`, `addPayment`, `voidPayment`, `updateDueDate`,
+  `addExpense`) and `app/actions/auth.ts` (`signInAction`,
+  `signOutAction`). Every action checks the admin session first,
+  validates inputs, returns `{ ok, error? }`, and revalidates the
+  affected pages. `createRecord` accepts an existing `customer_id` OR a
+  new customer name (created inline).
+- **Chatbot** — `POST /api/chat` (`app/api/chat/route.ts`) builds a
+  snapshot from live records and calls the rule-based chatbot in
+  `lib/chatbot.ts`. Read-only: it refuses any create / edit / delete /
+  void request and never writes anything. Requires a session (401 when
+  logged out). No external AI API, key, or cost.
+- **Auth** — `lib/auth.ts`: single admin session, cookie `tt_session`.
+  Supabase mode verifies the token with Supabase Auth; local mode checks
+  the demo admin seeded by `npm run seed`.
+
+## Switching to Supabase
+
+1. Create a Supabase project.
+2. Run the setup SQL once in the Supabase SQL editor:
+   `~/workspace/your_files/tt-travel-finance-setup.sql`
+   (creates `customers`, `finance_records`, `payments`, `expenses`,
+   `profiles`).
+3. Create the admin user in Supabase Auth (Dashboard → Authentication →
+   Add user), then add a matching row in `profiles` (id = the Auth user
+   id, email, display name).
+4. Set the 3 env values above in `.env.local` (local) or Vercel
+   Environment Variables (deployed) and restart.
+
+## Safe defaults (guide §9)
+
+- Overpayments BLOCKED — a payment may never exceed the remaining balance.
+- Single admin login; no multi-user roles in v1.
+- One next payment date per record.
+- Reminders: overdue + due within 7 days, in-system only
+  (no SMS / WhatsApp / email).
+- Deleting a payment = VOID with a reason (row kept, excluded from totals).
+- PKR only. No data import in v1. No receipt upload in v1.
+- Chatbot rule-based, no external AI API / key / cost.
+- Excluded: ticket booking, visa processing, hotel/airline, payment gateway.
+
+## Known gaps
+
+- (Coordinator to finalize — placeholders, not yet verified against the
+  live app.)
+- Live end-to-end check against a real Supabase project still pending
+  (seed → sale → invoice-style record flow, login, chatbot answers).
+- T14 screenshot sweep (360px–1440px, all pages) still pending.
+- No receipt upload, no data import, no SMS/WhatsApp/email reminders
+  (all excluded in v1 by design).
+- `confirm` / `cancel` of a record is not a DB transaction across
+  tables in the local JSON backend (single-file writes only).
