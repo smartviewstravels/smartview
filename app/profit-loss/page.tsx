@@ -50,22 +50,22 @@ export default async function ProfitLossPage({
       </p>
 
       <div className="stat-grid">
-        <div className="card">
+        <div className="card accent-green">
           <div className="stat-label">Total Received</div>
           <div className="stat-value">{formatPKR(totals.totalReceived)}</div>
         </div>
-        <div className="card">
+        <div className="card accent-amber">
           <div className="stat-label">Total Pending</div>
           <div className="stat-value">{formatPKR(totals.totalPending)}</div>
           <div className="note">
             Pending is not counted as profit until it is received.
           </div>
         </div>
-        <div className="card">
+        <div className="card accent-rose">
           <div className="stat-label">Total Expenses</div>
           <div className="stat-value">{formatPKR(totals.totalExpenses)}</div>
         </div>
-        <div className="card">
+        <div className="card accent-blue">
           <div className="stat-label">
             {totals.profit >= 0 ? "Profit" : "Loss"}
           </div>

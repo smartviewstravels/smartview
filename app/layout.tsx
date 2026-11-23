@@ -55,6 +55,18 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     );
   }
 
+  // Active nav pill, from the same request headers used for the login
+  // guard above. Falls back to no active link when no pathname header
+  // is present (e.g. client navigation without next-url).
+  const hdrs = await headers();
+  const currentPath = (
+    hdrs.get("x-pathname") ?? hdrs.get("next-url") ?? hdrs.get("x-invoke-path") ?? ""
+  ).split("?")[0];
+  const isActive = (href: string) =>
+    href === "/"
+      ? currentPath === "/"
+      : currentPath === href || currentPath.startsWith(href + "/");
+
   return (
     <html lang="en">
       <body>
@@ -65,14 +77,19 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             </Link>
             <nav className="topnav" aria-label="Main">
               {NAV_LINKS.map((link) => (
-                <Link key={link.href} href={link.href}>
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={isActive(link.href) ? "active" : undefined}
+                  aria-current={isActive(link.href) ? "page" : undefined}
+                >
                   {link.label}
                 </Link>
               ))}
             </nav>
             <div className="topbar-right">
               <form action={signOutAction}>
-                <button type="submit" className="btn btn-small">
+                <button type="submit" className="btn btn-small btn-header">
                   Logout
                 </button>
               </form>

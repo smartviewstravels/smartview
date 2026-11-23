@@ -86,7 +86,14 @@ export default async function RecordDetailPage({
             </p>
           )}
           <p>
-            <strong>Status:</strong> {record.status === "paid" ? "Paid" : "Open"}
+            <strong>Status:</strong>{" "}
+            <span
+              className={
+                record.status === "paid" ? "badge badge-paid" : "badge badge-open"
+              }
+            >
+              {record.status === "paid" ? "Paid" : "Open"}
+            </span>
           </p>
           <p>
             <strong>Next payment date:</strong> {formatDate(record.next_payment_date)}

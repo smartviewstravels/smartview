@@ -15,11 +15,11 @@ export default async function ExpensesPage() {
       <h1>Expenses</h1>
 
       <div className="stat-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
-        <div className="card">
+        <div className="card accent-rose">
           <div className="stat-label">Total Expenses (All Time)</div>
           <div className="stat-value">{formatPKR(total)}</div>
         </div>
-        <div className="card">
+        <div className="card accent-blue">
           <div className="stat-label">Number of expenses</div>
           <div className="stat-value">{expenses.length}</div>
         </div>
