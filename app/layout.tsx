@@ -23,13 +23,13 @@ export const instant = false;
 
 const NAV_LINKS = [
   { href: "/", label: "Dashboard" },
+  { href: "/chat", label: "AI Chatbot" },
   { href: "/tickets", label: "Ticket" },
   { href: "/umrah", label: "Umrah" },
   { href: "/combined", label: "Umrah + Ticket" },
   { href: "/tours", label: "Tours" },
   { href: "/expenses", label: "Expenses" },
   { href: "/profit-loss", label: "Profit & Loss" },
-  { href: "/chat", label: "AI Chatbot" },
   { href: "/customers", label: "Customers" },
 ];
 
