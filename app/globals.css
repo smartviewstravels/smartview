@@ -558,3 +558,104 @@ table.data-table {
   border-left: 4px solid #d97706;
   background: #fffbeb;
 }
+
+/* --- Mobile navigation: hamburger button + slide-in sidebar ---
+   The button is hidden on desktop; below 768px the horizontal topnav
+   is hidden instead and the sidebar takes over. The sidebar holds the
+   same links as the desktop nav, AI Chatbot included. */
+.menu-btn {
+  display: none;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  color: #ffffff;
+  border-radius: 6px;
+  font-size: 18px;
+  line-height: 1;
+  padding: 6px 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.menu-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.mobile-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 60;
+}
+
+.mobile-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  max-width: 85vw;
+  background: #1e40af;
+  z-index: 70;
+  box-shadow: 4px 0 16px rgba(15, 23, 42, 0.35);
+  animation: sidebar-in 0.2s ease-out;
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes sidebar-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.mobile-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.mobile-sidebar nav {
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.mobile-sidebar nav a {
+  color: #dbeafe;
+  font-size: 15px;
+  padding: 10px 12px;
+  border-radius: 6px;
+}
+
+.mobile-sidebar nav a:hover {
+  background: rgba(255, 255, 255, 0.14);
+  text-decoration: none;
+}
+
+.mobile-sidebar nav a.active {
+  background: #ffffff;
+  color: #1e40af;
+  font-weight: 700;
+}
+
+@media (max-width: 767px) {
+  .topnav {
+    display: none;
+  }
+
+  .menu-btn {
+    display: inline-block;
+  }
+
+  .brand {
+    font-size: 15px;
+  }
+}

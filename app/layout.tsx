@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { signOutAction } from "@/app/actions/auth";
+import MobileNav from "@/components/MobileNav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -72,6 +73,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       <body>
         <header className="topbar">
           <div className="topbar-inner">
+            <MobileNav links={NAV_LINKS} />
             <Link href="/" className="brand">
               TT Travel &amp; Tour Finance
             </Link>
