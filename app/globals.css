@@ -1,11 +1,14 @@
 @import "tailwindcss";
 
-/* TT Travel & Tour Finance — plain, flat, human-made look.
-   White background, dark slate text, one blue accent (#1d4ed8),
-   plain 1px borders. No gradients, no shadows, no glass. */
+/* TT Travel & Tour Finance — blue theme.
+   Deep blue header (#1e40af), light blue page background, white cards
+   with blue-tinted borders and soft shadows, blue primary buttons.
+   Money semantics keep their meaning: green = received/profit,
+   amber = pending/due soon, rose/red = expenses/overdue.
+   Flat colours only — no gradients, no glass. */
 
 body {
-  background: #ffffff;
+  background: #eaf2fb;
   color: #1e293b;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 15px;
@@ -25,18 +28,21 @@ h1 {
   font-size: 22px;
   font-weight: 700;
   margin: 0 0 16px 0;
+  color: #1e3a8a;
 }
 
 h2 {
   font-size: 17px;
   font-weight: 700;
   margin: 0 0 12px 0;
+  color: #1e40af;
 }
 
-/* --- Header nav: one row, never wraps, scrolls sideways on small screens --- */
+/* --- Header nav: deep blue bar, one row, never wraps, scrolls sideways on small screens --- */
 .topbar {
-  border-bottom: 1px solid #d1d5db;
-  background: #ffffff;
+  border-bottom: 1px solid #1e3a8a;
+  background: #1e40af;
+  box-shadow: 0 1px 4px rgba(30, 58, 138, 0.35);
 }
 
 .topbar-inner {
@@ -57,7 +63,7 @@ h2 {
 .brand {
   font-weight: 700;
   font-size: 16px;
-  color: #1e293b;
+  color: #ffffff;
   flex-shrink: 0;
 }
 
@@ -73,19 +79,20 @@ h2 {
 }
 
 .topnav a {
-  color: #334155;
+  color: #dbeafe;
   font-size: 14px;
   padding: 6px 10px;
   border-radius: 4px;
 }
 
 .topnav a:hover {
-  background: #f1f5f9;
+  background: rgba(255, 255, 255, 0.14);
   text-decoration: none;
 }
 
 .topnav a.active {
-  color: #1d4ed8;
+  background: #ffffff;
+  color: #1e40af;
   font-weight: 700;
 }
 
@@ -103,10 +110,45 @@ h2 {
 
 /* --- Cards --- */
 .card {
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
   padding: 16px;
   background: #ffffff;
+  box-shadow: 0 1px 3px rgba(30, 64, 175, 0.08);
+}
+
+/* Coloured top accent for stat cards: green = money in, amber = pending,
+   rose = expenses, blue = profit/count. */
+.card.accent-green {
+  border-top: 4px solid #16a34a;
+}
+
+.card.accent-green .stat-label {
+  color: #15803d;
+}
+
+.card.accent-amber {
+  border-top: 4px solid #d97706;
+}
+
+.card.accent-amber .stat-label {
+  color: #b45309;
+}
+
+.card.accent-rose {
+  border-top: 4px solid #e11d48;
+}
+
+.card.accent-rose .stat-label {
+  color: #be123c;
+}
+
+.card.accent-blue {
+  border-top: 4px solid #2563eb;
+}
+
+.card.accent-blue .stat-label {
+  color: #1d4ed8;
 }
 
 .stat-grid {
@@ -135,12 +177,53 @@ h2 {
   word-break: break-word;
 }
 
+/* --- Status badges --- */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.badge-paid {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge-open {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge-overdue {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.badge-due {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge-info {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.badge-voided {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
 /* --- Buttons --- */
 .btn {
   display: inline-block;
   padding: 8px 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
   background: #ffffff;
   color: #1e293b;
   font-size: 14px;
@@ -150,18 +233,20 @@ h2 {
 }
 
 .btn:hover {
-  background: #f8fafc;
+  background: #eff6ff;
+  border-color: #93c5fd;
   text-decoration: none;
 }
 
 .btn-primary {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
+  background: #2563eb;
+  border-color: #2563eb;
   color: #ffffff;
 }
 
 .btn-primary:hover {
-  background: #1e40af;
+  background: #1d4ed8;
+  border-color: #1d4ed8;
 }
 
 .btn-danger {
@@ -178,6 +263,18 @@ h2 {
 .btn-small {
   padding: 4px 10px;
   font-size: 13px;
+}
+
+/* Button that sits on the blue header bar. */
+.btn-header {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.6);
+  color: #ffffff;
+}
+
+.btn-header:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: #ffffff;
 }
 
 .btn:disabled {
@@ -197,8 +294,8 @@ label {
 input,
 select,
 textarea {
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
   padding: 8px 10px;
   width: 100%;
   background: #ffffff;
@@ -210,9 +307,10 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  outline: 2px solid #1d4ed8;
+  outline: 2px solid #2563eb;
   outline-offset: 0;
-  border-color: #1d4ed8;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
 .field {
@@ -235,7 +333,7 @@ textarea:focus {
   border: 1px solid #fca5a5;
   background: #fef2f2;
   color: #991b1b;
-  border-radius: 4px;
+  border-radius: 6px;
   padding: 10px 12px;
   font-size: 14px;
   margin-bottom: 12px;
@@ -250,7 +348,7 @@ textarea:focus {
   border: 1px solid #86efac;
   background: #f0fdf4;
   color: #166534;
-  border-radius: 4px;
+  border-radius: 6px;
   padding: 10px 12px;
   font-size: 14px;
   margin-bottom: 12px;
@@ -259,8 +357,9 @@ textarea:focus {
 /* --- Tables --- */
 .table-scroll {
   overflow-x: auto;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(30, 64, 175, 0.08);
 }
 
 table.data-table {
@@ -279,14 +378,14 @@ table.data-table {
 }
 
 .data-table th {
-  background: #f8fafc;
+  background: #eff6ff;
   font-size: 13px;
-  color: #475569;
+  color: #1e40af;
   white-space: nowrap;
 }
 
-.data-table tr:last-child td {
-  border-bottom: none;
+.data-table tbody tr:hover {
+  background: #f8fbff;
 }
 
 .data-table td.num,
@@ -302,8 +401,8 @@ table.data-table {
 
 .data-table tr.total-row td {
   font-weight: 700;
-  background: #f8fafc;
-  border-top: 1px solid #d1d5db;
+  background: #eff6ff;
+  border-top: 1px solid #bfdbfe;
 }
 
 .empty {
@@ -342,11 +441,12 @@ table.data-table {
 
 .modal-box {
   background: #ffffff;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
   padding: 20px;
   width: 100%;
   max-width: 540px;
+  box-shadow: 0 8px 24px rgba(30, 58, 138, 0.18);
 }
 
 .modal-head {
@@ -362,20 +462,22 @@ table.data-table {
 
 /* --- Chat --- */
 .chat-list {
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
   padding: 16px;
   min-height: 240px;
   max-height: 480px;
   overflow-y: auto;
   margin-bottom: 12px;
-  background: #ffffff;
+  background: #f8fbff;
 }
 
 .chat-msg {
   margin-bottom: 12px;
   font-size: 14px;
   line-height: 1.6;
+  padding: 10px 12px;
+  border-radius: 8px;
 }
 
 .chat-msg .who {
@@ -385,8 +487,16 @@ table.data-table {
   margin-bottom: 2px;
 }
 
+.chat-msg.assistant {
+  background: #dbeafe;
+}
+
 .chat-msg.assistant .who {
   color: #1d4ed8;
+}
+
+.chat-msg.user {
+  background: #f1f5f9;
 }
 
 .chip-row {
@@ -397,9 +507,9 @@ table.data-table {
 }
 
 .chip {
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  background: #ffffff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  background: #eff6ff;
   color: #1d4ed8;
   font-size: 13px;
   padding: 6px 10px;
@@ -408,7 +518,7 @@ table.data-table {
 }
 
 .chip:hover {
-  background: #eff6ff;
+  background: #dbeafe;
 }
 
 /* --- Misc --- */
@@ -426,13 +536,25 @@ table.data-table {
 }
 
 .list-row {
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
   padding: 12px 14px;
   margin-bottom: 10px;
   background: #ffffff;
+  box-shadow: 0 1px 3px rgba(30, 64, 175, 0.08);
 }
 
 .list-row a {
   font-weight: 700;
+}
+
+/* Payment reminder rows: overdue stands out in red, due soon in amber. */
+.list-row.overdue {
+  border-left: 4px solid #dc2626;
+  background: #fef2f2;
+}
+
+.list-row.due-soon {
+  border-left: 4px solid #d97706;
+  background: #fffbeb;
 }
