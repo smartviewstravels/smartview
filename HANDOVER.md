@@ -1,4 +1,4 @@
-# HANDOVER — TT Travel & Tour Finance
+# HANDOVER — Smart View Travel
 
 Source of truth: the Tricky Tech developer guidelines
 (`~/workspace/user/files/TT_Travel_Tour_Finance_Developer_Guidelines.pdf`,

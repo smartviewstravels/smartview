@@ -1,4 +1,4 @@
-# TT Travel & Tour Finance — build contract
+# Smart View Travel — build contract
 
 Source of truth: the Tricky Tech guide (extracted text at `/tmp/tt-guide.txt`,
 PDF at `~/workspace/user/files/TT_Travel_Tour_Finance_Developer_Guidelines.pdf`).

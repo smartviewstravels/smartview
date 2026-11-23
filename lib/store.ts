@@ -1,4 +1,4 @@
-// Data layer for TT Travel & Tour Finance.
+// Data layer for Smart View Travel.
 //
 // Two backends, one interface:
 //   - Supabase (real backend) when NEXT_PUBLIC_SUPABASE_URL and

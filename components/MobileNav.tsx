@@ -56,7 +56,7 @@ export default function MobileNav({ links }: { links: NavLinkItem[] }) {
           />
           <aside className="mobile-sidebar" aria-label="Menu">
             <div className="mobile-sidebar-head">
-              <span className="brand">TT Travel &amp; Tour Finance</span>
+              <span className="brand">Smart View Travel</span>
               <button
                 type="button"
                 className="menu-btn"

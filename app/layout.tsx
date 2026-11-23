@@ -8,8 +8,8 @@ import MobileNav from "@/components/MobileNav";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TT Travel & Tour Finance",
-  description: "Finance records for TT Travel & Tour: tickets, Umrah, tours, expenses and profit & loss.",
+  title: "Smart View Travel",
+  description: "Finance records for Smart View Travel: tickets, Umrah, tours, expenses and profit & loss.",
 };
 
 // Every page in this app reads the session cookie (requireAdmin /
@@ -75,7 +75,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <div className="topbar-inner">
             <MobileNav links={NAV_LINKS} />
             <Link href="/" className="brand">
-              TT Travel &amp; Tour Finance
+              Smart View Travel
             </Link>
             <nav className="topnav" aria-label="Main">
               {NAV_LINKS.map((link) => (

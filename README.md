@@ -1,4 +1,4 @@
-# TT Travel & Tour Finance
+# Smart View Travel
 
 Finance system for a travel & tour agency — Ticket, Umrah, Umrah + Ticket
 (combined), Tours, Daily Expenses, Profit & Loss, a read-only AI chatbot,

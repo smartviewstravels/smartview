@@ -1,6 +1,6 @@
 'use server';
 
-// Server actions for TT Travel & Tour Finance.
+// Server actions for Smart View Travel.
 // Every action: requireAdmin() first, validate inputs, return
 // { ok, error? } (never throw user-facing errors), revalidatePath the
 // affected pages. Overpayment blocking lives in the store — its error

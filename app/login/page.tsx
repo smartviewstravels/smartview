@@ -9,7 +9,7 @@ export default async function LoginPage() {
   return (
     <div style={{ maxWidth: 400, margin: "60px auto 0 auto" }}>
       <div className="card">
-        <h1 style={{ textAlign: "center" }}>TT Travel &amp; Tour Finance</h1>
+        <h1 style={{ textAlign: "center" }}>Smart View Travel</h1>
         <p className="note" style={{ marginBottom: 16, textAlign: "center" }}>
           Sign in to continue.
         </p>

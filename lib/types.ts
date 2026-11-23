@@ -1,4 +1,4 @@
-// Shared types for TT Travel & Tour Finance.
+// Shared types for Smart View Travel.
 // Field names match the SQL setup file (tt-travel-finance-setup.sql) exactly.
 
 export type FinanceType = "ticket" | "umrah" | "combined" | "tour";
