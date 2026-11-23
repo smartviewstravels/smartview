@@ -6,6 +6,7 @@ import { recordPending, sumActivePayments } from "@/lib/calc";
 import { formatDate, formatPKR } from "@/lib/format";
 import { FINANCE_TYPE_LABELS } from "@/lib/types";
 import { updateDueDate } from "@/app/actions/finance";
+import DeleteButton from "@/components/DeleteButton";
 import PaymentForm from "@/components/PaymentForm";
 import VoidPaymentForm from "@/components/VoidPaymentForm";
 
@@ -32,6 +33,14 @@ export default async function RecordDetailPage({
   const payments = await store.listPayments(record.id);
   const received = sumActivePayments(payments);
   const pending = recordPending(record, payments);
+  const listPath =
+    record.type === "combined"
+      ? "/combined"
+      : record.type === "tour"
+        ? "/tours"
+        : record.type === "umrah"
+          ? "/umrah"
+          : "/tickets";
 
   return (
     <div>
@@ -169,6 +178,17 @@ export default async function RecordDetailPage({
             </table>
           </div>
         )}
+      </section>
+
+      <section className="section">
+        <h2>Delete record</h2>
+        <div className="card">
+          <p>
+            Deletes this record permanently. A record with received
+            payments cannot be deleted — void its payments first.
+          </p>
+          <DeleteButton kind="record" id={record.id} returnTo={listPath} />
+        </div>
       </section>
     </div>
   );

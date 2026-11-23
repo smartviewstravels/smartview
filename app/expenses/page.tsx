@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/auth";
 import { getStore } from "@/lib/store";
 import { formatDate, formatPKR } from "@/lib/format";
+import DeleteButton from "@/components/DeleteButton";
 import ExpenseForm from "@/components/ExpenseForm";
 
 
@@ -46,6 +47,7 @@ export default async function ExpensesPage() {
                   <th>Category</th>
                   <th className="num">Amount</th>
                   <th>Description</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -56,11 +58,15 @@ export default async function ExpensesPage() {
                     <td>{e.category}</td>
                     <td className="num">{formatPKR(e.amount)}</td>
                     <td>{e.description ?? "—"}</td>
+                    <td>
+                      <DeleteButton kind="expense" id={e.id} />
+                    </td>
                   </tr>
                 ))}
                 <tr className="total-row">
                   <td colSpan={3}>Total</td>
                   <td className="num">{formatPKR(total)}</td>
+                  <td></td>
                   <td></td>
                 </tr>
               </tbody>

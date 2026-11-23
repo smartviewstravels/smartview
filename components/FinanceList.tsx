@@ -1,4 +1,5 @@
 import Link from "next/link";
+import DeleteButton from "@/components/DeleteButton";
 import RecordForm from "@/components/RecordForm";
 import { formatDate, formatPKR } from "@/lib/format";
 import type { Customer, FinanceType, RecordWithTotals } from "@/lib/types";
@@ -90,7 +91,8 @@ export default function FinanceList({
                   <td className="num">{formatPKR(r.pending)}</td>
                   <td>{formatDate(r.next_payment_date)}</td>
                   <td>
-                    <Link href={`/records/${r.id}`}>View</Link>
+                    <Link href={`/records/${r.id}`}>View</Link>{" "}
+                    <DeleteButton kind="record" id={r.id} />
                   </td>
                 </tr>
               ))}

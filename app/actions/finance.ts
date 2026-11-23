@@ -7,6 +7,7 @@
 // message is surfaced unchanged.
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getStore } from "@/lib/store";
 import { requireAdmin } from "@/lib/auth";
 import { todayPKT } from "@/lib/format";
@@ -85,6 +86,22 @@ export async function createCustomer(
     revalidatePath("/customers");
     revalidatePath("/");
     return { ok: true, id: customer.id };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
+
+export async function deleteCustomer(
+  formData: FormData,
+): Promise<ActionResult> {
+  await requireAdmin();
+  const customerId = str(formData, "customer_id") || str(formData, "id");
+  if (!customerId) return fail("Customer is required.");
+  try {
+    await getStore().deleteCustomer(customerId);
+    revalidatePath("/customers");
+    revalidatePath("/");
+    return { ok: true };
   } catch (err) {
     return fail(errorMessage(err));
   }
@@ -252,6 +269,40 @@ export async function updateDueDate(formData: FormData): Promise<ActionResult> {
   }
 }
 
+/**
+ * Delete a record. The store refuses when the record has received
+ * payments — that message is surfaced as-is. `return_to` (record
+ * detail page only) sends the user back to the record's list after a
+ * successful delete; only in-app list paths are accepted.
+ */
+export async function deleteRecord(formData: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const recordId = str(formData, "finance_record_id") || str(formData, "record_id");
+  if (!recordId) return fail("Record is required.");
+  try {
+    const store = getStore();
+    const record = await store.getRecord(recordId);
+    if (!record) return fail("Record not found.");
+    await store.deleteRecord(recordId);
+    revalidateRecordPages(record.type, recordId);
+    const returnTo = str(formData, "return_to");
+    const allowed = [
+      "/",
+      "/tickets",
+      "/umrah",
+      "/combined",
+      "/tours",
+      "/customers",
+      "/expenses",
+      "/profit-loss",
+    ];
+    if (returnTo && allowed.includes(returnTo)) redirect(returnTo);
+    return { ok: true };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Expenses
 // ---------------------------------------------------------------------------
@@ -282,6 +333,21 @@ export async function addExpense(formData: FormData): Promise<ActionResult> {
     revalidatePath("/");
     revalidatePath("/profit-loss");
     return { ok: true, id: expense.id };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
+
+export async function deleteExpense(formData: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const expenseId = str(formData, "expense_id") || str(formData, "id");
+  if (!expenseId) return fail("Expense is required.");
+  try {
+    await getStore().deleteExpense(expenseId);
+    revalidatePath("/expenses");
+    revalidatePath("/");
+    revalidatePath("/profit-loss");
+    return { ok: true };
   } catch (err) {
     return fail(errorMessage(err));
   }

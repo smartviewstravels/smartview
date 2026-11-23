@@ -311,13 +311,38 @@ async function main() {
       snapB.totalsAll.profit,
       snapB.totalsAll.totalReceived - snapB.totalsAll.totalExpenses,
     );
+
+    // ---- Phase C: delete guards (UI delete buttons) ----
+    await resetDb();
+    const custF = await store.createCustomer({ name: "Demo Verify Delete", phone: "0300-0000000" });
+    // Expense: delete works, list shrinks.
+    const exp = await store.addExpense({ name: "Demo Delete Expense", amount: 7000, expense_date: today, category: "Office" });
+    await store.deleteExpense(exp.id);
+    check("Delete expense removed", (await store.listExpenses()).length, 0);
+    // Record with a live payment: delete refused, record unchanged.
+    const recPay = await store.createRecord({ customer_id: custF.id, type: "ticket", total_amount: 50000 });
+    await store.addPayment({ finance_record_id: recPay.id, amount: 10000, payment_date: today, method: "Cash" });
+    await expectThrow("Delete record with payments refused", () => store.deleteRecord(recPay.id), "Void the payments");
+    check("Refused delete kept the record", (await store.getRecord(recPay.id)) !== null, true);
+    // Void the payment, then delete works and removes the voided payment too.
+    const livePay = (await store.listPayments(recPay.id)).find((p) => p.status === "active");
+    await store.voidPayment(livePay.id, "entered by mistake");
+    await store.deleteRecord(recPay.id);
+    check("Delete record after void removed it", (await store.getRecord(recPay.id)) === null, true);
+    check("Voided payments removed with record", (await store.listPayments(recPay.id)).length, 0);
+    // Customer with records: delete refused; after records gone, delete works.
+    const recKeep = await store.createRecord({ customer_id: custF.id, type: "umrah", total_amount: 30000 });
+    await expectThrow("Delete customer with records refused", () => store.deleteCustomer(custF.id), "finance records");
+    await store.deleteRecord(recKeep.id);
+    await store.deleteCustomer(custF.id);
+    check("Delete customer after records gone", (await store.getCustomer(custF.id)) === null, true);
   } finally {
     await restoreDb(hadBackup);
   }
 
   console.log(`\n${passes} passed, ${failures} failed.`);
   if (failures > 0) {
-    console.log("ACCEPTANCE FAILED — T01–T13 not all green.");
+    console.log("ACCEPTANCE FAILED — T01–T13 + delete guards not all green.");
     process.exit(1);
   }
   console.log("ACCEPTANCE PASSED — T01–T13 green (T14 is the screenshot sweep).");

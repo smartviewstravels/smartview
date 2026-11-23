@@ -83,6 +83,12 @@ export interface Store {
     id: string,
     next_payment_date: string | null,
   ): Promise<FinanceRecord>;
+  /**
+   * Delete a record. Refuses when the record has received (active)
+   * payments — void those first, so received money never vanishes
+   * silently from profit. Voided payments are removed with the record.
+   */
+  deleteRecord(id: string): Promise<void>;
 
   listPayments(recordId?: string): Promise<Payment[]>;
   addPayment(data: AddPaymentInput): Promise<Payment>;
@@ -90,6 +96,21 @@ export interface Store {
 
   listExpenses(): Promise<Expense[]>;
   addExpense(data: AddExpenseInput): Promise<Expense>;
+  /** Expenses have no dependents, so delete is unconditional. */
+  deleteExpense(id: string): Promise<void>;
+
+  listCustomers(): Promise<Customer[]>;
+  getCustomer(id: string): Promise<Customer | null>;
+  createCustomer(data: {
+    name: string;
+    phone?: string | null;
+    cnic_passport?: string | null;
+  }): Promise<Customer>;
+  /**
+   * Delete a customer. Refuses when the customer still has finance
+   * records — delete those first, so no record loses its customer.
+   */
+  deleteCustomer(id: string): Promise<void>;
 
   listProfiles(): Promise<Profile[]>;
 }
@@ -182,6 +203,19 @@ class LocalStore implements Store {
     return customer;
   }
 
+  async deleteCustomer(id: string): Promise<void> {
+    const db = await readLocalDb();
+    const index = db.customers.findIndex((c) => c.id === id);
+    if (index === -1) throw new Error("Customer not found.");
+    if (db.finance_records.some((r) => r.customer_id === id)) {
+      throw new Error(
+        "This customer has finance records. Delete those records first.",
+      );
+    }
+    db.customers.splice(index, 1);
+    await writeLocalDb(db);
+  }
+
   async listRecords(type?: FinanceType): Promise<FinanceRecord[]> {
     const db = await readLocalDb();
     const rows = type
@@ -216,6 +250,22 @@ class LocalStore implements Store {
     record.updated_at = nowISO();
     await writeLocalDb(db);
     return record;
+  }
+
+  async deleteRecord(id: string): Promise<void> {
+    const db = await readLocalDb();
+    const index = db.finance_records.findIndex((r) => r.id === id);
+    if (index === -1) throw new Error("Record not found.");
+    const payments = db.payments.filter((p) => p.finance_record_id === id);
+    if (sumActivePayments(payments) > 0) {
+      throw new Error(
+        "This record has received payments. Void the payments first, then delete the record.",
+      );
+    }
+    // Only voided payments can remain — remove them with the record.
+    db.payments = db.payments.filter((p) => p.finance_record_id !== id);
+    db.finance_records.splice(index, 1);
+    await writeLocalDb(db);
   }
 
   async listPayments(recordId?: string): Promise<Payment[]> {
@@ -312,6 +362,14 @@ class LocalStore implements Store {
     db.expenses.push(expense);
     await writeLocalDb(db);
     return expense;
+  }
+
+  async deleteExpense(id: string): Promise<void> {
+    const db = await readLocalDb();
+    const index = db.expenses.findIndex((e) => e.id === id);
+    if (index === -1) throw new Error("Expense not found.");
+    db.expenses.splice(index, 1);
+    await writeLocalDb(db);
   }
 
   async listProfiles(): Promise<Profile[]> {
@@ -441,6 +499,25 @@ class SupabaseStore implements Store {
     return row as Customer;
   }
 
+  async deleteCustomer(id: string): Promise<void> {
+    const sb = supabaseAdmin();
+    const customer = await this.getCustomer(id);
+    if (!customer) throw new Error("Customer not found.");
+    const { data: records, error: readError } = await sb
+      .from("finance_records")
+      .select("id")
+      .eq("customer_id", id)
+      .limit(1);
+    if (readError) throw new Error(readError.message);
+    if ((records ?? []).length > 0) {
+      throw new Error(
+        "This customer has finance records. Delete those records first.",
+      );
+    }
+    const { error } = await sb.from("customers").delete().eq("id", id);
+    if (error) throw new Error(error.message);
+  }
+
   async listRecords(type?: FinanceType): Promise<FinanceRecord[]> {
     let q = supabaseAdmin()
       .from("finance_records")
@@ -493,6 +570,27 @@ class SupabaseStore implements Store {
       .single();
     if (error) throw new Error(error.message);
     return row as FinanceRecord;
+  }
+
+  async deleteRecord(id: string): Promise<void> {
+    const sb = supabaseAdmin();
+    const record = await this.getRecord(id);
+    if (!record) throw new Error("Record not found.");
+    const payments = await this.listPayments(id);
+    if (sumActivePayments(payments) > 0) {
+      throw new Error(
+        "This record has received payments. Void the payments first, then delete the record.",
+      );
+    }
+    // Only voided payments can remain — remove them first, then the
+    // record (no reliance on a DB cascade).
+    const { error: payError } = await sb
+      .from("payments")
+      .delete()
+      .eq("finance_record_id", id);
+    if (payError) throw new Error(payError.message);
+    const { error } = await sb.from("finance_records").delete().eq("id", id);
+    if (error) throw new Error(error.message);
   }
 
   async listPayments(recordId?: string): Promise<Payment[]> {
@@ -598,6 +696,14 @@ class SupabaseStore implements Store {
       .single();
     if (error) throw new Error(error.message);
     return row as Expense;
+  }
+
+  async deleteExpense(id: string): Promise<void> {
+    const { error } = await supabaseAdmin()
+      .from("expenses")
+      .delete()
+      .eq("id", id);
+    if (error) throw new Error(error.message);
   }
 
   async listProfiles(): Promise<Profile[]> {
