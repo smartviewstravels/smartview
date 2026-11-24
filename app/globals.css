@@ -74,7 +74,7 @@ h2 {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #ffffff;
+  background: transparent;
   overflow: hidden;
   flex-shrink: 0;
 }
