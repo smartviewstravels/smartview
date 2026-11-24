@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
@@ -11,6 +12,26 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Smart View Travel",
   description: "Finance records for Smart View Travel: tickets, Umrah, tours, expenses and profit & loss.",
+  metadataBase: new URL("https://smartview-ebon.vercel.app"),
+  icons: { icon: "/logo.png" },
+  openGraph: {
+    title: "Smart View Travel",
+    description: "Finance records for Smart View Travel: tickets, Umrah, tours, expenses and profit & loss.",
+    images: [
+      {
+        url: "/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Smart View Travel",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Smart View Travel",
+    description: "Finance records for Smart View Travel: tickets, Umrah, tours, expenses and profit & loss.",
+    images: ["/opengraph-image.png"],
+  },
 };
 
 // Every page in this app reads the session cookie (requireAdmin /
@@ -68,6 +89,14 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <div className="topbar-inner">
             <MobileNav links={NAV_LINKS} />
             <Link href="/" className="brand">
+              <span className="brand-logo">
+                <Image
+                  src="/logo.png"
+                  alt="Smart View Travel logo"
+                  width={32}
+                  height={32}
+                />
+              </span>
               Smart View Travel
             </Link>
             <TopNav links={NAV_LINKS} />

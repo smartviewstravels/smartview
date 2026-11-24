@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -56,7 +57,17 @@ export default function MobileNav({ links }: { links: NavLinkItem[] }) {
           />
           <aside className="mobile-sidebar" aria-label="Menu">
             <div className="mobile-sidebar-head">
-              <span className="brand">Smart View Travel</span>
+              <span className="brand">
+                <span className="brand-logo">
+                  <Image
+                    src="/logo.png"
+                    alt="Smart View Travel logo"
+                    width={32}
+                    height={32}
+                  />
+                </span>
+                Smart View Travel
+              </span>
               <button
                 type="button"
                 className="menu-btn"
