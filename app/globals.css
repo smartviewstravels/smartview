@@ -120,6 +120,13 @@ h2 {
   flex-shrink: 0;
 }
 
+/* Loading skeleton: a plain grey block while a page loads. */
+.skeleton {
+  background: #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
 /* Floating chatbot button — fixed bottom-right on every logged-in page. */
 .chat-fab {
   position: fixed;

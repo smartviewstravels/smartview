@@ -9,6 +9,7 @@
 // Cookie handling uses Next 16's async cookies() API.
 
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID, scryptSync, timingSafeEqual } from "crypto";
 import { redirect } from "next/navigation";
@@ -25,7 +26,13 @@ export interface Session {
   email: string;
 }
 
-export async function getSession(): Promise<Session | null> {
+/**
+ * Read the session from the cookie. Memoized per request with React
+ * cache(): the layout and the page both call getSession/requireAdmin on
+ * every render, and without this the Supabase branch would verify the
+ * token against Supabase Auth twice per page load.
+ */
+export const getSession = cache(async function getSession(): Promise<Session | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
@@ -47,7 +54,7 @@ export async function getSession(): Promise<Session | null> {
     userId: "local-admin",
     email: db.local_admin?.email ?? "admin@demo.local",
   };
-}
+});
 
 /** Redirect to /login when there is no session. Use at the top of pages. */
 export async function requireAdmin(): Promise<Session> {
