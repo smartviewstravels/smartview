@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
+import ChatBox from "@/components/ChatBox";
 import { loadAll } from "@/components/data";
 import { computeTotals, getReminders } from "@/lib/calc";
 import { formatDate, formatPKR } from "@/lib/format";
@@ -15,6 +16,21 @@ export default async function DashboardPage() {
   return (
     <div>
       <h1>Dashboard</h1>
+
+      <section className="section">
+        <div className="card" style={{ borderColor: "#1e40af", borderWidth: 2 }}>
+          <h2 style={{ marginTop: 0 }}>AI Chatbot</h2>
+          <p className="note" style={{ marginBottom: 12 }}>
+            Ask about your records — total pending, today&apos;s payments,
+            expenses or profit. The chatbot is read-only and cannot change
+            anything.
+          </p>
+          <ChatBox />
+          <p className="note" style={{ marginTop: 12 }}>
+            <Link href="/chat">Open the full chatbot page &rarr;</Link>
+          </p>
+        </div>
+      </section>
 
       <div className="stat-grid">
         <div className="card accent-green">
