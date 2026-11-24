@@ -107,6 +107,32 @@ export async function deleteCustomer(
   }
 }
 
+export async function updateCustomer(
+  formData: FormData,
+): Promise<ActionResult> {
+  await requireAdmin();
+  const customerId = str(formData, "customer_id") || str(formData, "id");
+  if (!customerId) return fail("Customer is required.");
+  const name = str(formData, "name");
+  if (!name) return fail("Customer name is required.");
+  try {
+    await getStore().updateCustomer(customerId, {
+      name,
+      phone: str(formData, "phone") || null,
+      cnic_passport: str(formData, "cnic_passport") || null,
+    });
+    revalidatePath("/customers");
+    revalidatePath("/");
+    revalidatePath("/tickets");
+    revalidatePath("/umrah");
+    revalidatePath("/combined");
+    revalidatePath("/tours");
+    return { ok: true };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Records
 // ---------------------------------------------------------------------------
@@ -303,6 +329,60 @@ export async function deleteRecord(formData: FormData): Promise<ActionResult> {
   }
 }
 
+export async function updateRecord(formData: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const recordId =
+    str(formData, "record_id") || str(formData, "finance_record_id");
+  if (!recordId) return fail("Record is required.");
+  const nextPaymentDate = str(formData, "next_payment_date");
+  if (nextPaymentDate && !isDate(nextPaymentDate)) {
+    return fail("Next payment date must be a valid date.");
+  }
+  try {
+    const store = getStore();
+    const record = await store.getRecord(recordId);
+    if (!record) return fail("Record not found.");
+    const customerId = str(formData, "customer_id");
+    if (customerId) {
+      const existing = await store.getCustomer(customerId);
+      if (!existing) return fail("Selected customer not found.");
+    }
+    if (record.type === "tour" && !str(formData, "tour_name")) {
+      return fail("Tour / city name is required.");
+    }
+    let updated;
+    if (record.type === "combined") {
+      const umrah = num(formData, "umrah_amount");
+      const ticket = num(formData, "ticket_amount");
+      if (!Number.isFinite(umrah) || !Number.isFinite(ticket)) {
+        return fail("Umrah and ticket amounts must be numbers.");
+      }
+      updated = await store.updateRecord(recordId, {
+        customer_id: customerId || undefined,
+        umrah_amount: umrah,
+        ticket_amount: ticket,
+        next_payment_date: nextPaymentDate || null,
+      });
+    } else {
+      const total = num(formData, "total_amount");
+      if (!Number.isFinite(total)) {
+        return fail("Total amount must be a number.");
+      }
+      updated = await store.updateRecord(recordId, {
+        customer_id: customerId || undefined,
+        tour_name:
+          record.type === "tour" ? str(formData, "tour_name") : undefined,
+        total_amount: total,
+        next_payment_date: nextPaymentDate || null,
+      });
+    }
+    revalidateRecordPages(updated.type, updated.id);
+    return { ok: true, id: updated.id };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Expenses
 // ---------------------------------------------------------------------------
@@ -344,6 +424,39 @@ export async function deleteExpense(formData: FormData): Promise<ActionResult> {
   if (!expenseId) return fail("Expense is required.");
   try {
     await getStore().deleteExpense(expenseId);
+    revalidatePath("/expenses");
+    revalidatePath("/");
+    revalidatePath("/profit-loss");
+    return { ok: true };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
+
+export async function updateExpense(formData: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const expenseId = str(formData, "expense_id") || str(formData, "id");
+  if (!expenseId) return fail("Expense is required.");
+  const name = str(formData, "name");
+  if (!name) return fail("Expense name is required.");
+  const amount = num(formData, "amount");
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return fail("Expense amount must be more than zero.");
+  }
+  const expenseDate = str(formData, "expense_date") || todayPKT();
+  if (!isDate(expenseDate)) return fail("Expense date must be a valid date.");
+  const category = str(formData, "category") as ExpenseCategory;
+  if (!EXPENSE_CATEGORIES.includes(category)) {
+    return fail("Please choose a valid category.");
+  }
+  try {
+    await getStore().updateExpense(expenseId, {
+      name,
+      amount,
+      expense_date: expenseDate,
+      category,
+      description: str(formData, "description") || null,
+    });
     revalidatePath("/expenses");
     revalidatePath("/");
     revalidatePath("/profit-loss");

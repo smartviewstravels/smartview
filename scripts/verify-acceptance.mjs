@@ -336,6 +336,24 @@ async function main() {
     await store.deleteRecord(recKeep.id);
     await store.deleteCustomer(custF.id);
     check("Delete customer after records gone", (await store.getCustomer(custF.id)) === null, true);
+
+    // ---- Phase D: edit guards (UI edit buttons) ----
+    await resetDb();
+    const custG = await store.createCustomer({ name: "Demo Verify Edit", phone: "0300-0000000" });
+    // Expense: edit amount works.
+    const exp2 = await store.addExpense({ name: "Demo Edit Expense", amount: 4000, expense_date: today, category: "Office" });
+    const exp2After = await store.updateExpense(exp2.id, { name: "Demo Edit Expense", amount: 6500, expense_date: today, category: "Office" });
+    check("Edit expense amount", exp2After.amount, 6500);
+    // Customer: edit name works.
+    const custGAfter = await store.updateCustomer(custG.id, { name: "Demo Verify Edited" });
+    check("Edit customer name", custGAfter.name, "Demo Verify Edited");
+    // Record: edit total up works; edit total below received is refused.
+    const recEdit = await store.createRecord({ customer_id: custG.id, type: "ticket", total_amount: 50000 });
+    await store.addPayment({ finance_record_id: recEdit.id, amount: 20000, payment_date: today, method: "Cash" });
+    await expectThrow("Edit total below received refused", () => store.updateRecord(recEdit.id, { total_amount: 10000 }), "already received");
+    const recEditAfter = await store.updateRecord(recEdit.id, { total_amount: 80000 });
+    check("Edit record total up", recEditAfter.total_amount, 80000);
+    check("Edit record total up keeps pending", recEditAfter.total_amount - 20000, 60000);
   } finally {
     await restoreDb(hadBackup);
   }

@@ -84,6 +84,22 @@ export interface Store {
     next_payment_date: string | null,
   ): Promise<FinanceRecord>;
   /**
+   * Edit a record (correct a wrong entry). Changing the total is
+   * refused when the new total is less than the amount already
+   * received — that money is real and must be voided first.
+   */
+  updateRecord(
+    id: string,
+    data: {
+      customer_id?: string;
+      tour_name?: string | null;
+      total_amount?: number;
+      umrah_amount?: number | null;
+      ticket_amount?: number | null;
+      next_payment_date?: string | null;
+    },
+  ): Promise<FinanceRecord>;
+  /**
    * Delete a record. Refuses when the record has received (active)
    * payments — void those first, so received money never vanishes
    * silently from profit. Voided payments are removed with the record.
@@ -98,6 +114,8 @@ export interface Store {
   addExpense(data: AddExpenseInput): Promise<Expense>;
   /** Expenses have no dependents, so delete is unconditional. */
   deleteExpense(id: string): Promise<void>;
+  /** Edit an expense (name, amount, date, category, description). */
+  updateExpense(id: string, data: AddExpenseInput): Promise<Expense>;
 
   listCustomers(): Promise<Customer[]>;
   getCustomer(id: string): Promise<Customer | null>;
@@ -111,6 +129,15 @@ export interface Store {
    * records — delete those first, so no record loses its customer.
    */
   deleteCustomer(id: string): Promise<void>;
+  /** Edit a customer (name, phone, CNIC / passport). */
+  updateCustomer(
+    id: string,
+    data: {
+      name: string;
+      phone?: string | null;
+      cnic_passport?: string | null;
+    },
+  ): Promise<Customer>;
 
   listProfiles(): Promise<Profile[]>;
 }
@@ -216,6 +243,25 @@ class LocalStore implements Store {
     await writeLocalDb(db);
   }
 
+  async updateCustomer(
+    id: string,
+    data: {
+      name: string;
+      phone?: string | null;
+      cnic_passport?: string | null;
+    },
+  ): Promise<Customer> {
+    const db = await readLocalDb();
+    const customer = db.customers.find((c) => c.id === id);
+    if (!customer) throw new Error("Customer not found.");
+    customer.name = data.name.trim();
+    customer.phone = data.phone?.trim() || null;
+    customer.cnic_passport = data.cnic_passport?.trim() || null;
+    customer.updated_at = nowISO();
+    await writeLocalDb(db);
+    return customer;
+  }
+
   async listRecords(type?: FinanceType): Promise<FinanceRecord[]> {
     const db = await readLocalDb();
     const rows = type
@@ -266,6 +312,55 @@ class LocalStore implements Store {
     db.payments = db.payments.filter((p) => p.finance_record_id !== id);
     db.finance_records.splice(index, 1);
     await writeLocalDb(db);
+  }
+
+  async updateRecord(
+    id: string,
+    data: {
+      customer_id?: string;
+      tour_name?: string | null;
+      total_amount?: number;
+      umrah_amount?: number | null;
+      ticket_amount?: number | null;
+      next_payment_date?: string | null;
+    },
+  ): Promise<FinanceRecord> {
+    const db = await readLocalDb();
+    const record = db.finance_records.find((r) => r.id === id);
+    if (!record) throw new Error("Record not found.");
+    const payments = db.payments.filter((p) => p.finance_record_id === id);
+    const received = sumActivePayments(payments);
+    let total = record.total_amount;
+    if (record.type === "combined") {
+      const umrah = data.umrah_amount ?? record.umrah_amount ?? 0;
+      const ticket = data.ticket_amount ?? record.ticket_amount ?? 0;
+      if (umrah < 0 || ticket < 0)
+        throw new Error("Amounts cannot be negative.");
+      total = umrah + ticket;
+      if (total <= 0)
+        throw new Error("Combined total must be more than zero.");
+      record.umrah_amount = umrah;
+      record.ticket_amount = ticket;
+    } else if (data.total_amount !== undefined) {
+      if (data.total_amount <= 0)
+        throw new Error("Total amount must be more than zero.");
+      total = data.total_amount;
+    }
+    if (total < received) {
+      throw new Error(
+        `Total cannot be less than the amount already received (PKR ${Math.round(received).toLocaleString("en-PK")}). Void a payment first if the total is wrong.`,
+      );
+    }
+    record.total_amount = total;
+    if (data.customer_id) record.customer_id = data.customer_id;
+    if (data.tour_name !== undefined)
+      record.tour_name = data.tour_name?.trim() || null;
+    if (data.next_payment_date !== undefined)
+      record.next_payment_date = data.next_payment_date || null;
+    record.updated_at = nowISO();
+    syncRecordStatus(db, record);
+    await writeLocalDb(db);
+    return record;
   }
 
   async listPayments(recordId?: string): Promise<Payment[]> {
@@ -370,6 +465,19 @@ class LocalStore implements Store {
     if (index === -1) throw new Error("Expense not found.");
     db.expenses.splice(index, 1);
     await writeLocalDb(db);
+  }
+
+  async updateExpense(id: string, data: AddExpenseInput): Promise<Expense> {
+    const db = await readLocalDb();
+    const expense = db.expenses.find((e) => e.id === id);
+    if (!expense) throw new Error("Expense not found.");
+    expense.name = data.name.trim();
+    expense.amount = data.amount;
+    expense.expense_date = data.expense_date;
+    expense.category = data.category;
+    expense.description = data.description?.trim() || null;
+    await writeLocalDb(db);
+    return expense;
   }
 
   async listProfiles(): Promise<Profile[]> {
@@ -518,6 +626,29 @@ class SupabaseStore implements Store {
     if (error) throw new Error(error.message);
   }
 
+  async updateCustomer(
+    id: string,
+    data: {
+      name: string;
+      phone?: string | null;
+      cnic_passport?: string | null;
+    },
+  ): Promise<Customer> {
+    const { data: row, error } = await supabaseAdmin()
+      .from("customers")
+      .update({
+        name: data.name.trim(),
+        phone: data.phone?.trim() || null,
+        cnic_passport: data.cnic_passport?.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw new Error(error.message);
+    return row as Customer;
+  }
+
   async listRecords(type?: FinanceType): Promise<FinanceRecord[]> {
     let q = supabaseAdmin()
       .from("finance_records")
@@ -591,6 +722,61 @@ class SupabaseStore implements Store {
     if (payError) throw new Error(payError.message);
     const { error } = await sb.from("finance_records").delete().eq("id", id);
     if (error) throw new Error(error.message);
+  }
+
+  async updateRecord(
+    id: string,
+    data: {
+      customer_id?: string;
+      tour_name?: string | null;
+      total_amount?: number;
+      umrah_amount?: number | null;
+      ticket_amount?: number | null;
+      next_payment_date?: string | null;
+    },
+  ): Promise<FinanceRecord> {
+    const record = await this.getRecord(id);
+    if (!record) throw new Error("Record not found.");
+    const payments = await this.listPayments(id);
+    const received = sumActivePayments(payments);
+    let total = record.total_amount;
+    const patch: Record<string, unknown> = {};
+    if (record.type === "combined") {
+      const umrah = data.umrah_amount ?? record.umrah_amount ?? 0;
+      const ticket = data.ticket_amount ?? record.ticket_amount ?? 0;
+      if (umrah < 0 || ticket < 0)
+        throw new Error("Amounts cannot be negative.");
+      total = umrah + ticket;
+      if (total <= 0)
+        throw new Error("Combined total must be more than zero.");
+      patch.umrah_amount = umrah;
+      patch.ticket_amount = ticket;
+    } else if (data.total_amount !== undefined) {
+      if (data.total_amount <= 0)
+        throw new Error("Total amount must be more than zero.");
+      total = data.total_amount;
+    }
+    if (total < received) {
+      throw new Error(
+        `Total cannot be less than the amount already received (PKR ${Math.round(received).toLocaleString("en-PK")}). Void a payment first if the total is wrong.`,
+      );
+    }
+    patch.total_amount = total;
+    if (data.customer_id) patch.customer_id = data.customer_id;
+    if (data.tour_name !== undefined)
+      patch.tour_name = data.tour_name?.trim() || null;
+    if (data.next_payment_date !== undefined)
+      patch.next_payment_date = data.next_payment_date || null;
+    patch.updated_at = new Date().toISOString();
+    const { data: row, error } = await supabaseAdmin()
+      .from("finance_records")
+      .update(patch)
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw new Error(error.message);
+    await this.syncStatus(id);
+    return (await this.getRecord(id)) ?? (row as FinanceRecord);
   }
 
   async listPayments(recordId?: string): Promise<Payment[]> {
@@ -704,6 +890,23 @@ class SupabaseStore implements Store {
       .delete()
       .eq("id", id);
     if (error) throw new Error(error.message);
+  }
+
+  async updateExpense(id: string, data: AddExpenseInput): Promise<Expense> {
+    const { data: row, error } = await supabaseAdmin()
+      .from("expenses")
+      .update({
+        name: data.name.trim(),
+        amount: data.amount,
+        expense_date: data.expense_date,
+        category: data.category,
+        description: data.description?.trim() || null,
+      })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw new Error(error.message);
+    return row as Expense;
   }
 
   async listProfiles(): Promise<Profile[]> {

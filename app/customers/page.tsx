@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
 import { loadAll } from "@/components/data";
 import DeleteButton from "@/components/DeleteButton";
+import EditCustomerForm from "@/components/EditCustomerForm";
 import { FINANCE_TYPE_LABELS, type FinanceType } from "@/lib/types";
 
 
@@ -65,6 +66,7 @@ export default async function CustomersPage() {
                       <Link href={`/tickets?q=${encodeURIComponent(c.name)}`}>
                         View records
                       </Link>{" "}
+                      <EditCustomerForm customer={c} />{" "}
                       <DeleteButton kind="customer" id={c.id} />
                     </td>
                   </tr>

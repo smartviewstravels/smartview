@@ -2,6 +2,7 @@ import { requireAdmin } from "@/lib/auth";
 import { getStore } from "@/lib/store";
 import { formatDate, formatPKR } from "@/lib/format";
 import DeleteButton from "@/components/DeleteButton";
+import EditExpenseForm from "@/components/EditExpenseForm";
 import ExpenseForm from "@/components/ExpenseForm";
 
 
@@ -59,6 +60,7 @@ export default async function ExpensesPage() {
                     <td className="num">{formatPKR(e.amount)}</td>
                     <td>{e.description ?? "—"}</td>
                     <td>
+                      <EditExpenseForm expense={e} />{" "}
                       <DeleteButton kind="expense" id={e.id} />
                     </td>
                   </tr>

@@ -7,6 +7,7 @@ import { formatDate, formatPKR } from "@/lib/format";
 import { FINANCE_TYPE_LABELS } from "@/lib/types";
 import { updateDueDate } from "@/app/actions/finance";
 import DeleteButton from "@/components/DeleteButton";
+import EditRecordForm from "@/components/EditRecordForm";
 import PaymentForm from "@/components/PaymentForm";
 import VoidPaymentForm from "@/components/VoidPaymentForm";
 
@@ -30,6 +31,7 @@ export default async function RecordDetailPage({
   if (!record) notFound();
 
   const customer = await store.getCustomer(record.customer_id);
+  const customers = await store.listCustomers();
   const payments = await store.listPayments(record.id);
   const received = sumActivePayments(payments);
   const pending = recordPending(record, payments);
@@ -126,6 +128,10 @@ export default async function RecordDetailPage({
               Leave the date empty to clear it.
             </p>
           </form>
+
+          <div style={{ marginTop: 16 }}>
+            <EditRecordForm record={record} customers={customers} />
+          </div>
         </div>
       </section>
 
