@@ -66,6 +66,9 @@ export default async function CustomersPage() {
                       <Link href={`/tickets?q=${encodeURIComponent(c.name)}`}>
                         View records
                       </Link>{" "}
+                      <Link href={`/customers/${c.id}/statement`}>
+                        Statement
+                      </Link>{" "}
                       <EditCustomerForm customer={c} />{" "}
                       <DeleteButton kind="customer" id={c.id} />
                     </td>

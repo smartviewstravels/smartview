@@ -78,6 +78,14 @@ export default async function RecordDetailPage({
             <strong>Customer:</strong> {customer?.name ?? "Unknown customer"}
             {customer?.phone ? ` — ${customer.phone}` : ""}
             {customer?.cnic_passport ? ` — CNIC/Passport: ${customer.cnic_passport}` : ""}
+            {customer && (
+              <>
+                {" — "}
+                <Link href={`/customers/${customer.id}/statement`}>
+                  View statement
+                </Link>
+              </>
+            )}
           </p>
           <p>
             <strong>Service:</strong> {FINANCE_TYPE_LABELS[record.type]}
