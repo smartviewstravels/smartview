@@ -3,26 +3,16 @@
 import { useState } from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { formatDate } from "@/lib/format";
+import type { LedgerData, LedgerRow } from "@/lib/ledger";
 
-export interface StatementRow {
-  service: string;
-  total: number;
-  paid: number;
-  pending: number;
-  dueDate: string;
-  status: string;
-}
-
-export interface StatementData {
-  customerName: string;
-  customerPhone: string | null;
-  customerCnic: string | null;
-  statementDate: string;
-  rows: StatementRow[];
-  totalAmount: number;
-  totalPaid: number;
-  totalPending: number;
-}
+/**
+ * One shared data shape for the statement preview and the PDF:
+ * the ledger built by lib/ledger.ts. Both render from this same
+ * object, so they can never disagree.
+ */
+export type StatementRow = LedgerRow;
+export type StatementData = LedgerData;
 
 const NAVY: [number, number, number] = [30, 35, 77];
 const GOLD: [number, number, number] = [201, 162, 39];
@@ -50,14 +40,20 @@ async function logoDataUrl(): Promise<string> {
   });
 }
 
-/** Builds the branded statement PDF. Shared by Download and Share. */
+/**
+ * Builds the branded account-ledger PDF. Shared by Download and Share.
+ * Landscape A4: nine columns (three of them money columns with
+ * "PKR 1,234,567" values) cannot fit legibly in portrait at a readable
+ * font size, while landscape leaves room for Particulars to breathe.
+ */
 async function buildPdf(data: StatementData): Promise<{
   blob: Blob;
   filename: string;
 }> {
   const logo = await logoDataUrl();
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "landscape" });
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
 
   // Header: logo + business name + tagline.
   doc.addImage(logo, "PNG", 14, 10, 24, 24);
@@ -70,12 +66,9 @@ async function buildPdf(data: StatementData): Promise<{
   doc.setFontSize(10);
   doc.text("Your Journey Our Passion", 42, 25);
   doc.setTextColor(...NAVY);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.text("ACCOUNT STATEMENT", pageWidth - 14, 18, { align: "right" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.text(`Date: ${data.statementDate}`, pageWidth - 14, 25, {
+  doc.text(`Date: ${formatDate(data.printDate)}`, pageWidth - 14, 18, {
     align: "right",
   });
 
@@ -84,62 +77,97 @@ async function buildPdf(data: StatementData): Promise<{
   doc.setLineWidth(0.8);
   doc.line(14, 38, pageWidth - 14, 38);
 
-  // Customer block.
-  let y = 48;
+  // Shaded title bar.
+  doc.setFillColor(...NAVY);
+  doc.rect(14, 42, pageWidth - 28, 9, "F");
+  doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text("Billed to:", 14, y);
-  y += 7;
   doc.setFontSize(12);
-  doc.text(data.customerName, 14, y);
-  y += 7;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(90, 90, 90);
-  const details = [
-    data.customerPhone ? `Phone: ${data.customerPhone}` : null,
-    data.customerCnic ? `CNIC / Passport: ${data.customerCnic}` : null,
-    `Records: ${data.rows.length}`,
-  ]
-    .filter(Boolean)
-    .join("   |   ");
-  doc.text(details, 14, y);
-  doc.setTextColor(...NAVY);
+  doc.text("Account Ledger", 17, 48.5);
 
-  // Records table.
+  // Meta block: two columns of label/value pairs.
+  const metaTop = 60;
+  const metaLeft: [string, string][] = [
+    ["Account Code", data.accountCode],
+    ["Account Title", data.accountTitle],
+    ["Balance", pkr(data.balance)],
+  ];
+  const metaRight: [string, string][] = [
+    [
+      "Period",
+      `${formatDate(data.periodFrom)} – ${formatDate(data.periodTo)}`,
+    ],
+    ["Print Date", formatDate(data.printDate)],
+    ["Currency", data.currency],
+  ];
+  const metaRow = (pair: [string, string], x: number, y: number): void => {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(...NAVY);
+    doc.text(`${pair[0]}:`, x, y);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    doc.text(pair[1], x + 32, y);
+  };
+  metaLeft.forEach((pair, i) => metaRow(pair, 14, metaTop + i * 6));
+  metaRight.forEach((pair, i) => metaRow(pair, 155, metaTop + i * 6));
+
+  // Ledger table.
   autoTable(doc, {
-    startY: y + 8,
-    head: [["Service", "Total", "Paid", "Pending", "Due date", "Status"]],
+    startY: metaTop + 22,
+    head: [
+      [
+        "Date",
+        "Type",
+        "Trans.#",
+        "Particulars",
+        "Inv/Ref",
+        "Rate",
+        "Debit",
+        "Credit",
+        "Balance",
+      ],
+    ],
     body: data.rows.map((r) => [
-      r.service,
-      pkr(r.total),
-      pkr(r.paid),
-      pkr(r.pending),
-      r.dueDate,
-      r.status,
+      formatDate(r.date),
+      r.type,
+      r.transNo,
+      r.particulars,
+      r.invRef || "—",
+      r.rate,
+      pkr(r.debit),
+      pkr(r.credit),
+      pkr(r.balance),
     ]),
+    foot: [
+      [
+        { content: "Totals", colSpan: 6 },
+        pkr(data.totalDebit),
+        pkr(data.totalCredit),
+        pkr(data.balance),
+      ],
+    ],
+    showFoot: "lastPage",
     headStyles: { fillColor: NAVY, textColor: [255, 255, 255] },
-    columnStyles: {
-      1: { halign: "right" },
-      2: { halign: "right" },
-      3: { halign: "right" },
-      4: { halign: "center" },
-      5: { halign: "center" },
+    footStyles: {
+      fillColor: [239, 246, 255],
+      textColor: NAVY,
+      fontStyle: "bold",
     },
-    styles: { fontSize: 10 },
+    columnStyles: {
+      0: { cellWidth: 24 },
+      1: { cellWidth: 30 },
+      2: { cellWidth: 20 },
+      3: { cellWidth: 62 },
+      4: { cellWidth: 24 },
+      5: { cellWidth: 16, halign: "right" },
+      6: { cellWidth: 31, halign: "right" },
+      7: { cellWidth: 31, halign: "right" },
+      8: { cellWidth: 31, halign: "right" },
+    },
+    styles: { fontSize: 9 },
   });
-
-  // Totals.
-  const afterTable = (doc as unknown as { lastAutoTable: { finalY: number } })
-    .lastAutoTable.finalY;
-  let ty = afterTable + 10;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text(`Total: ${pkr(data.totalAmount)}`, 14, ty);
-  ty += 7;
-  doc.text(`Paid: ${pkr(data.totalPaid)}`, 14, ty);
-  ty += 7;
-  doc.text(`Pending: ${pkr(data.totalPending)}`, 14, ty);
 
   // Footer.
   doc.setFont("helvetica", "normal");
@@ -148,11 +176,11 @@ async function buildPdf(data: StatementData): Promise<{
   doc.text(
     "Generated by Smart View Travel — Your Journey Our Passion",
     pageWidth / 2,
-    doc.internal.pageSize.getHeight() - 10,
+    pageHeight - 10,
     { align: "center" },
   );
 
-  const filename = `Smart-View-Statement-${slug(data.customerName)}-${data.statementDate.replaceAll("/", "-")}.pdf`;
+  const filename = `Smart-View-Statement-${slug(data.accountTitle)}-${data.printDate}.pdf`;
   return { blob: doc.output("blob"), filename };
 }
 
@@ -195,8 +223,8 @@ export default function StatementActions({ data }: { data: StatementData }) {
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
-          title: "Smart View Travel — Account Statement",
-          text: `Account statement for ${data.customerName}`,
+          title: "Smart View Travel — Account Ledger",
+          text: `Account ledger for ${data.accountTitle}`,
         });
       } else {
         downloadBlob(blob, filename);
