@@ -16,9 +16,14 @@ export type StatementData = LedgerData;
 
 const NAVY: [number, number, number] = [30, 35, 77];
 const GOLD: [number, number, number] = [201, 162, 39];
+/** Pale blue-grey shading of the sample ledger (title bar + table head). */
+const LIGHT: [number, number, number] = [217, 226, 243];
+const GRID: [number, number, number] = [157, 177, 209];
 
+/** Plain number with thousand separators, no currency prefix —
+ *  "PKR" appears only in the meta block (Currency: PKR). */
 function pkr(n: number): string {
-  return `PKR ${Math.round(n).toLocaleString("en-PK")}`;
+  return Math.round(n).toLocaleString("en-PK");
 }
 
 function slug(name: string): string {
@@ -42,9 +47,13 @@ async function logoDataUrl(): Promise<string> {
 
 /**
  * Builds the branded account-ledger PDF. Shared by Download and Share.
- * Landscape A4: nine columns (three of them money columns with
- * "PKR 1,234,567" values) cannot fit legibly in portrait at a readable
- * font size, while landscape leaves room for Particulars to breathe.
+ * Landscape A4: nine columns (three of them money columns) cannot fit
+ * legibly in portrait at a readable font size, while landscape leaves
+ * room for Particulars to breathe. Layout matches the sample ledger:
+ * logo top-left, business name + tagline top-right, a light shaded
+ * bordered "Account Ledger" title bar, the meta block (account on the
+ * left, period/print date/currency right-aligned on the right), and a
+ * fully bordered nine-column table with a shaded bold header.
  */
 async function buildPdf(data: StatementData): Promise<{
   blob: Blob;
@@ -55,20 +64,16 @@ async function buildPdf(data: StatementData): Promise<{
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
 
-  // Header: logo + business name + tagline.
+  // Header: logo top-left, business name + tagline top-right.
   doc.addImage(logo, "PNG", 14, 10, 24, 24);
   doc.setTextColor(...NAVY);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
-  doc.text("Smart View Travel", 42, 18);
+  doc.text("Smart View Travel", pageWidth - 14, 18, { align: "right" });
   doc.setTextColor(...GOLD);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.text("Your Journey Our Passion", 42, 25);
-  doc.setTextColor(...NAVY);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.text(`Date: ${formatDate(data.printDate)}`, pageWidth - 14, 18, {
+  doc.text("Your Journey Our Passion", pageWidth - 14, 25, {
     align: "right",
   });
 
@@ -77,21 +82,41 @@ async function buildPdf(data: StatementData): Promise<{
   doc.setLineWidth(0.8);
   doc.line(14, 38, pageWidth - 14, 38);
 
-  // Shaded title bar.
-  doc.setFillColor(...NAVY);
-  doc.rect(14, 42, pageWidth - 28, 9, "F");
-  doc.setTextColor(255, 255, 255);
+  // Title bar: bordered, light shaded, bold centered dark text.
+  doc.setFillColor(...LIGHT);
+  doc.setDrawColor(...GRID);
+  doc.setLineWidth(0.4);
+  doc.rect(14, 42, pageWidth - 28, 9, "FD");
+  doc.setTextColor(...NAVY);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
-  doc.text("Account Ledger", 17, 48.5);
+  doc.text("Account Ledger", pageWidth / 2, 48.5, { align: "center" });
 
-  // Meta block: two columns of label/value pairs.
+  // Meta block: account on the left, period/print/currency right.
   const metaTop = 60;
-  const metaLeft: [string, string][] = [
-    ["Account Code", data.accountCode],
-    ["Account Title", data.accountTitle],
-    ["Balance", pkr(data.balance)],
+  const rightEdge = pageWidth - 14;
+  // Left column: the Account Title value is wrapped to a 105mm bound
+  // so even a very long name can never reach the right column; the
+  // y cursor advances by the wrapped line count.
+  let leftY = metaTop;
+  const metaLeft: [string, string, boolean][] = [
+    ["Account Code", data.accountCode, false],
+    ["Account Title", data.accountTitle, false],
+    ["Balance", pkr(data.balance), true],
   ];
+  for (const [label, value, boldValue] of metaLeft) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(...NAVY);
+    doc.text(`${label}:`, 14, leftY);
+    const lines = doc.splitTextToSize(value, 105);
+    doc.setFont("helvetica", boldValue ? "bold" : "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    doc.text(lines, 46, leftY);
+    leftY += lines.length * 5 + 1;
+  }
+  // Right column: each pair right-aligned against the page edge.
   const metaRight: [string, string][] = [
     [
       "Period",
@@ -100,22 +125,24 @@ async function buildPdf(data: StatementData): Promise<{
     ["Print Date", formatDate(data.printDate)],
     ["Currency", data.currency],
   ];
-  const metaRow = (pair: [string, string], x: number, y: number): void => {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(...NAVY);
-    doc.text(`${pair[0]}:`, x, y);
+  metaRight.forEach(([label, value], i) => {
+    const y = metaTop + i * 6;
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.setTextColor(0, 0, 0);
-    doc.text(pair[1], x + 32, y);
-  };
-  metaLeft.forEach((pair, i) => metaRow(pair, 14, metaTop + i * 6));
-  metaRight.forEach((pair, i) => metaRow(pair, 155, metaTop + i * 6));
+    const valueWidth = doc.getTextWidth(value);
+    doc.text(value, rightEdge, y, { align: "right" });
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(...NAVY);
+    doc.text(`${label}:`, rightEdge - valueWidth - 2, y, {
+      align: "right",
+    });
+  });
 
   // Ledger table.
   autoTable(doc, {
-    startY: metaTop + 22,
+    startY: Math.max(leftY + 4, metaTop + 22),
     head: [
       [
         "Date",
@@ -149,16 +176,21 @@ async function buildPdf(data: StatementData): Promise<{
       ],
     ],
     showFoot: "lastPage",
-    headStyles: { fillColor: NAVY, textColor: [255, 255, 255] },
+    theme: "grid",
+    headStyles: {
+      fillColor: LIGHT,
+      textColor: NAVY,
+      fontStyle: "bold",
+    },
     footStyles: {
-      fillColor: [239, 246, 255],
+      fillColor: LIGHT,
       textColor: NAVY,
       fontStyle: "bold",
     },
     columnStyles: {
-      0: { cellWidth: 24 },
-      1: { cellWidth: 30 },
-      2: { cellWidth: 20 },
+      0: { cellWidth: 24, halign: "center" },
+      1: { cellWidth: 30, halign: "center" },
+      2: { cellWidth: 20, halign: "center" },
       3: { cellWidth: 62 },
       4: { cellWidth: 24 },
       5: { cellWidth: 16, halign: "right" },
@@ -166,7 +198,7 @@ async function buildPdf(data: StatementData): Promise<{
       7: { cellWidth: 31, halign: "right" },
       8: { cellWidth: 31, halign: "right" },
     },
-    styles: { fontSize: 9 },
+    styles: { fontSize: 9, lineColor: GRID, lineWidth: 0.1 },
   });
 
   // Footer.
