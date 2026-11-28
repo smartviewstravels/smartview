@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { voidPayment } from "@/app/actions/finance";
+import { voidPayment, voidVendorPayment } from "@/app/actions/finance";
 
 type FormState = { ok: boolean; error?: string };
 
@@ -12,18 +12,30 @@ async function submitVoid(
   return voidPayment(formData);
 }
 
+async function submitVendorVoid(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  return voidVendorPayment(formData);
+}
+
 interface VoidPaymentFormProps {
   paymentId: string;
+  /** "payment" voids a client payment; "vendor" voids a vendor payment. */
+  kind?: "payment" | "vendor";
 }
 
 /**
  * Void button per active payment. Clicking "Void" reveals an inline reason
  * input (no prompt()). The payment is kept as a voided row, not deleted.
  */
-export default function VoidPaymentForm({ paymentId }: VoidPaymentFormProps) {
+export default function VoidPaymentForm({
+  paymentId,
+  kind = "payment",
+}: VoidPaymentFormProps) {
   const [showReason, setShowReason] = useState(false);
   const [state, formAction, pending] = useActionState<FormState, FormData>(
-    submitVoid,
+    kind === "vendor" ? submitVendorVoid : submitVoid,
     { ok: false },
   );
 

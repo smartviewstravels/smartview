@@ -53,6 +53,7 @@ const NAV_LINKS = [
   { href: "/expenses", label: "Expenses" },
   { href: "/profit-loss", label: "Profit & Loss" },
   { href: "/customers", label: "Customers" },
+  { href: "/vendors", label: "Vendors" },
 ];
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {

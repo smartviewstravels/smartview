@@ -5,22 +5,25 @@ import {
   deleteCustomer,
   deleteExpense,
   deleteRecord,
+  deleteVendor,
 } from "@/app/actions/finance";
 
 type FormState = { ok: boolean; error?: string };
 
-export type DeleteKind = "record" | "expense" | "customer";
+export type DeleteKind = "record" | "expense" | "customer" | "vendor";
 
 const ID_FIELD: Record<DeleteKind, string> = {
   record: "record_id",
   expense: "expense_id",
   customer: "customer_id",
+  vendor: "vendor_id",
 };
 
 const NOUN: Record<DeleteKind, string> = {
   record: "record",
   expense: "expense",
   customer: "customer",
+  vendor: "vendor",
 };
 
 function submitDelete(
@@ -33,7 +36,9 @@ function submitDelete(
       ? deleteRecord
       : kind === "expense"
         ? deleteExpense
-        : deleteCustomer;
+        : kind === "vendor"
+          ? deleteVendor
+          : deleteCustomer;
   return action(formData);
 }
 
@@ -45,10 +50,11 @@ interface DeleteButtonProps {
 }
 
 /**
- * Delete button for one row (record, expense or customer). Clicking
+ * Delete button for one row (record, expense, customer or vendor). Clicking
  * "Delete" reveals an inline confirm (no prompt()), matching
  * VoidPaymentForm. Guard errors from the store (record has payments,
- * customer has records) show inline and nothing is deleted.
+ * customer has records, vendor has records) show inline and nothing is
+ * deleted.
  */
 export default function DeleteButton({ kind, id, returnTo }: DeleteButtonProps) {
   const [confirming, setConfirming] = useState(false);
