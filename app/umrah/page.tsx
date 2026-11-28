@@ -10,7 +10,7 @@ export default async function UmrahPage({
 }) {
   await requireAdmin();
   const { q = "" } = await searchParams;
-  const { customers, records } = await loadAll("umrah");
+  const { customers, records, vendors } = await loadAll("umrah");
 
   return (
     <FinanceList
@@ -18,6 +18,7 @@ export default async function UmrahPage({
       title="Umrah"
       customers={customers}
       records={records}
+      vendors={vendors}
       q={q}
     />
   );

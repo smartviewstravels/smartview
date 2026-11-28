@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { createRecord } from "@/app/actions/finance";
-import type { Customer, FinanceType } from "@/lib/types";
+import type { Customer, FinanceType, Vendor } from "@/lib/types";
 import { FINANCE_TYPE_LABELS } from "@/lib/types";
 import { todayPKT } from "@/lib/format";
 
 interface RecordFormProps {
   type: FinanceType;
   customers: Customer[];
+  vendors: Vendor[];
 }
 
 /**
@@ -17,13 +18,17 @@ interface RecordFormProps {
  * or a new one (name + optional phone / CNIC). Combined records take an
  * Umrah amount and a Ticket amount; the total shown is their sum.
  */
-export default function RecordForm({ type, customers }: RecordFormProps) {
+export default function RecordForm({ type, customers, vendors }: RecordFormProps) {
   const [open, setOpen] = useState(false);
   const [customerMode, setCustomerMode] = useState<"existing" | "new">(
     customers.length > 0 ? "existing" : "new",
   );
   const [umrahAmount, setUmrahAmount] = useState("");
   const [ticketAmount, setTicketAmount] = useState("");
+  // Vendor is optional: clearing the vendor clears its reference and cost.
+  const [vendorId, setVendorId] = useState("");
+  const [vendorReference, setVendorReference] = useState("");
+  const [vendorCost, setVendorCost] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -34,8 +39,12 @@ export default function RecordForm({ type, customers }: RecordFormProps) {
     setError(null);
     const result = await createRecord(formData);
     setPending(false);
-    if (result.ok) setOpen(false);
-    else setError(result.error ?? "Could not save the record.");
+    if (result.ok) {
+      setOpen(false);
+      setVendorId("");
+      setVendorReference("");
+      setVendorCost("");
+    } else setError(result.error ?? "Could not save the record.");
   }
 
   const combinedTotal =
@@ -209,6 +218,69 @@ export default function RecordForm({ type, customers }: RecordFormProps) {
                   defaultValue={todayPKT()}
                 />
               </div>
+
+              <div className="field">
+                <label htmlFor="vendor_id">Vendor (optional)</label>
+                <select
+                  id="vendor_id"
+                  name="vendor_id"
+                  value={vendorId}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setVendorId(next);
+                    if (!next) {
+                      setVendorReference("");
+                      setVendorCost("");
+                    }
+                  }}
+                >
+                  <option value="">No vendor</option>
+                  {vendors.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                      {v.company_name ? ` — ${v.company_name}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {vendorId && (
+                <>
+                  <div className="form-row">
+                    <div className="field">
+                      <label htmlFor="vendor_reference">
+                        Vendor reference number (optional)
+                      </label>
+                      <input
+                        id="vendor_reference"
+                        name="vendor_reference"
+                        type="text"
+                        value={vendorReference}
+                        onChange={(e) => setVendorReference(e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="vendor_cost">
+                        Vendor purchase cost (PKR)
+                      </label>
+                      <input
+                        id="vendor_cost"
+                        name="vendor_cost"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={vendorCost}
+                        onChange={(e) => setVendorCost(e.target.value)}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                  <p className="note" style={{ marginBottom: 12 }}>
+                    What the business pays the vendor for this ticket or
+                    package. The vendor is paid from the record page.
+                  </p>
+                </>
+              )}
 
               <button type="submit" className="btn btn-primary" disabled={pending}>
                 {pending ? "Saving..." : "Save record"}

@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { updateRecord } from "@/app/actions/finance";
-import type { Customer, FinanceRecord } from "@/lib/types";
+import type { Customer, FinanceRecord, Vendor } from "@/lib/types";
 import { FINANCE_TYPE_LABELS } from "@/lib/types";
 
 interface EditRecordFormProps {
   record: FinanceRecord;
   customers: Customer[];
+  vendors: Vendor[];
 }
 
 /**
@@ -18,6 +19,7 @@ interface EditRecordFormProps {
 export default function EditRecordForm({
   record,
   customers,
+  vendors,
 }: EditRecordFormProps) {
   const [open, setOpen] = useState(false);
   const [umrahAmount, setUmrahAmount] = useState(
@@ -25,6 +27,14 @@ export default function EditRecordForm({
   );
   const [ticketAmount, setTicketAmount] = useState(
     String(record.ticket_amount ?? 0),
+  );
+  // Vendor is optional: clearing the vendor clears its reference and cost.
+  const [vendorId, setVendorId] = useState(record.vendor_id ?? "");
+  const [vendorReference, setVendorReference] = useState(
+    record.vendor_reference ?? "",
+  );
+  const [vendorCost, setVendorCost] = useState(
+    record.vendor_cost == null ? "" : String(record.vendor_cost),
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -169,6 +179,71 @@ export default function EditRecordForm({
                   defaultValue={record.next_payment_date ?? ""}
                 />
               </div>
+
+              <div className="field">
+                <label htmlFor={`edit-vendor-${record.id}`}>
+                  Vendor (optional)
+                </label>
+                <select
+                  id={`edit-vendor-${record.id}`}
+                  name="vendor_id"
+                  value={vendorId}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setVendorId(next);
+                    if (!next) {
+                      setVendorReference("");
+                      setVendorCost("");
+                    }
+                  }}
+                >
+                  <option value="">No vendor</option>
+                  {vendors.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                      {v.company_name ? ` — ${v.company_name}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {vendorId && (
+                <div className="form-row">
+                  <div className="field">
+                    <label htmlFor={`edit-vendor-ref-${record.id}`}>
+                      Vendor reference number (optional)
+                    </label>
+                    <input
+                      id={`edit-vendor-ref-${record.id}`}
+                      name="vendor_reference"
+                      type="text"
+                      value={vendorReference}
+                      onChange={(e) => setVendorReference(e.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`edit-vendor-cost-${record.id}`}>
+                      Vendor purchase cost (PKR)
+                    </label>
+                    <input
+                      id={`edit-vendor-cost-${record.id}`}
+                      name="vendor_cost"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={vendorCost}
+                      onChange={(e) => setVendorCost(e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+              )}
+              {vendorId && (
+                <p className="note" style={{ marginBottom: 12 }}>
+                  The cost cannot be lowered below what has already been
+                  paid to the vendor.
+                </p>
+              )}
 
               <button type="submit" className="btn btn-primary" disabled={pending}>
                 {pending ? "Saving..." : "Save changes"}

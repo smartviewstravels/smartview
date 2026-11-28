@@ -10,7 +10,7 @@ export default async function TicketsPage({
 }) {
   await requireAdmin();
   const { q = "" } = await searchParams;
-  const { customers, records } = await loadAll("ticket");
+  const { customers, records, vendors } = await loadAll("ticket");
 
   return (
     <FinanceList
@@ -18,6 +18,7 @@ export default async function TicketsPage({
       title="Ticket"
       customers={customers}
       records={records}
+      vendors={vendors}
       q={q}
     />
   );

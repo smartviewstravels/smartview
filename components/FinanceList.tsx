@@ -3,7 +3,12 @@ import DeleteButton from "@/components/DeleteButton";
 import EditRecordForm from "@/components/EditRecordForm";
 import RecordForm from "@/components/RecordForm";
 import { formatDate, formatPKR } from "@/lib/format";
-import type { Customer, FinanceType, RecordWithTotals } from "@/lib/types";
+import type {
+  Customer,
+  FinanceType,
+  RecordWithTotals,
+  Vendor,
+} from "@/lib/types";
 import { FINANCE_TYPE_LABELS } from "@/lib/types";
 
 interface FinanceListProps {
@@ -11,6 +16,7 @@ interface FinanceListProps {
   title: string;
   customers: Customer[];
   records: RecordWithTotals[];
+  vendors: Vendor[];
   q: string;
 }
 
@@ -24,6 +30,7 @@ export default function FinanceList({
   title,
   customers,
   records,
+  vendors,
   q,
 }: FinanceListProps) {
   const query = q.trim().toLowerCase();
@@ -51,7 +58,7 @@ export default function FinanceList({
             aria-label="Search by customer name"
           />
         </form>
-        <RecordForm type={type} customers={customers} />
+        <RecordForm type={type} customers={customers} vendors={vendors} />
       </div>
 
       {filtered.length === 0 ? (
@@ -93,7 +100,11 @@ export default function FinanceList({
                   <td>{formatDate(r.next_payment_date)}</td>
                   <td>
                     <Link href={`/records/${r.id}`}>View</Link>{" "}
-                    <EditRecordForm record={r} customers={customers} />{" "}
+                    <EditRecordForm
+                      record={r}
+                      customers={customers}
+                      vendors={vendors}
+                    />{" "}
                     <DeleteButton kind="record" id={r.id} />
                   </td>
                 </tr>

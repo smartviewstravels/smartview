@@ -10,7 +10,7 @@ export default async function CombinedPage({
 }) {
   await requireAdmin();
   const { q = "" } = await searchParams;
-  const { customers, records } = await loadAll("combined");
+  const { customers, records, vendors } = await loadAll("combined");
 
   return (
     <FinanceList
@@ -18,6 +18,7 @@ export default async function CombinedPage({
       title="Umrah + Ticket"
       customers={customers}
       records={records}
+      vendors={vendors}
       q={q}
     />
   );
