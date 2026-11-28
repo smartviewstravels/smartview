@@ -539,6 +539,10 @@ export async function addVendorPayment(
     });
     revalidateRecordPages(record.type, recordId);
     revalidatePath("/vendors");
+    // revalidatePath("/vendors") only refreshes the list page — the
+    // vendor's own detail page needs its literal path too, or its
+    // totals stay stale after paying from that page.
+    if (record.vendor_id) revalidatePath(`/vendors/${record.vendor_id}`);
     return { ok: true, id: payment.id };
   } catch (err) {
     return fail(errorMessage(err));
@@ -562,6 +566,7 @@ export async function voidVendorPayment(
     const record = await store.getRecord(payment.finance_record_id);
     if (record) revalidateRecordPages(record.type, record.id);
     revalidatePath("/vendors");
+    revalidatePath(`/vendors/${payment.vendor_id}`);
     revalidatePath("/profit-loss");
     return { ok: true };
   } catch (err) {
