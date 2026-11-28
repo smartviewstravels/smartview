@@ -53,7 +53,11 @@ export default function VoidPaymentForm({
 
   return (
     <form action={formAction} style={{ minWidth: 220 }}>
-      <input type="hidden" name="payment_id" value={paymentId} />
+      <input
+        type="hidden"
+        name={kind === "vendor" ? "vendor_payment_id" : "payment_id"}
+        value={paymentId}
+      />
       {state.error && <p className="error">{state.error}</p>}
       <div className="field" style={{ marginBottom: 6 }}>
         <label htmlFor={`void-reason-${paymentId}`}>Reason for void</label>

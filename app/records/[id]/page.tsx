@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { getStore } from "@/lib/store";
+import { loadAll } from "@/components/data";
 import { recordPending, sumActivePayments } from "@/lib/calc";
 import { formatDate, formatPKR } from "@/lib/format";
 import { FINANCE_TYPE_LABELS } from "@/lib/types";
@@ -9,6 +10,7 @@ import { updateDueDate } from "@/app/actions/finance";
 import DeleteButton from "@/components/DeleteButton";
 import EditRecordForm from "@/components/EditRecordForm";
 import PaymentForm from "@/components/PaymentForm";
+import VendorPaymentForm from "@/components/VendorPaymentForm";
 import VoidPaymentForm from "@/components/VoidPaymentForm";
 
 
@@ -35,6 +37,15 @@ export default async function RecordDetailPage({
   const payments = await store.listPayments(record.id);
   const received = sumActivePayments(payments);
   const pending = recordPending(record, payments);
+  // Vendor figures come from loadAll(), whose records carry the vendor
+  // join (vendor, vendorPaid, vendorPending, vendorProfit).
+  const { records: allRecords, vendors, vendorPayments } = await loadAll();
+  const enriched = allRecords.find((r) => r.id === id);
+  const vendor = enriched?.vendor ?? null;
+  const myVendorPayments = vendorPayments
+    .filter((p) => p.finance_record_id === id)
+    .slice()
+    .sort((a, b) => (a.payment_date < b.payment_date ? 1 : -1));
   const listPath =
     record.type === "combined"
       ? "/combined"
@@ -138,7 +149,11 @@ export default async function RecordDetailPage({
           </form>
 
           <div style={{ marginTop: 16 }}>
-            <EditRecordForm record={record} customers={customers} />
+            <EditRecordForm
+              record={record}
+              customers={customers}
+              vendors={vendors}
+            />
           </div>
         </div>
       </section>
@@ -149,6 +164,110 @@ export default async function RecordDetailPage({
           <PaymentForm recordId={record.id} pending={pending} />
         </div>
       </section>
+
+      {vendor && (
+        <section className="section">
+          <h2>Vendor</h2>
+          <div className="card">
+            <p>
+              <strong>Vendor:</strong>{" "}
+              <Link href={`/vendors/${vendor.id}`}>{vendor.name}</Link>
+              {vendor.company_name ? ` — ${vendor.company_name}` : ""}
+              {vendor.phone ? ` — ${vendor.phone}` : ""}
+            </p>
+            <p>
+              <strong>Vendor reference:</strong>{" "}
+              {record.vendor_reference ?? "—"}
+            </p>
+            <p>
+              <strong>Vendor cost:</strong>{" "}
+              {record.vendor_cost == null
+                ? "—"
+                : formatPKR(record.vendor_cost)}
+            </p>
+            <p>
+              <strong>Paid to vendor:</strong>{" "}
+              {formatPKR(enriched?.vendorPaid ?? 0)}
+            </p>
+            <p>
+              <strong>Still owed to vendor:</strong>{" "}
+              {formatPKR(enriched?.vendorPending ?? 0)}
+            </p>
+            <p>
+              <strong>Profit on this record:</strong>{" "}
+              {enriched?.vendorProfit == null
+                ? "—"
+                : formatPKR(enriched.vendorProfit)}
+            </p>
+            <p className="note">
+              Sale total minus vendor cost. Vendor payments count as an
+              expense in Profit &amp; Loss.
+            </p>
+          </div>
+        </section>
+      )}
+
+      {vendor && record.vendor_cost != null && (
+        <section className="section">
+          <h2>Pay vendor</h2>
+          <div className="card">
+            <VendorPaymentForm
+              recordId={record.id}
+              vendorId={vendor.id}
+              pending={enriched?.vendorPending ?? 0}
+            />
+          </div>
+        </section>
+      )}
+
+      {vendor && (
+        <section className="section">
+          <h2>Vendor payment history</h2>
+          {myVendorPayments.length === 0 ? (
+            <p>No vendor payments yet.</p>
+          ) : (
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th className="num">Amount</th>
+                    <th>Method</th>
+                    <th>Reference</th>
+                    <th>Note</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {myVendorPayments.map((p) => (
+                    <tr
+                      key={p.id}
+                      className={p.status === "voided" ? "voided" : undefined}
+                    >
+                      <td>{formatDate(p.payment_date)}</td>
+                      <td className="num">{formatPKR(p.amount)}</td>
+                      <td>{p.method ?? "—"}</td>
+                      <td>{p.reference ?? "—"}</td>
+                      <td>{p.note ?? "—"}</td>
+                      <td>
+                        {p.status === "voided"
+                          ? `Voided${p.void_reason ? ` — ${p.void_reason}` : ""}`
+                          : "Active"}
+                      </td>
+                      <td>
+                        {p.status === "active" && (
+                          <VoidPaymentForm paymentId={p.id} kind="vendor" />
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="section">
         <h2>Payment history</h2>

@@ -25,8 +25,14 @@ export default async function ProfitLossPage({
       ? rawPeriod
       : "all";
 
-  const { records, payments, expenses } = await loadAll();
-  const totals = computeTotals(records, payments, expenses, period);
+  const { records, payments, expenses, vendorPayments } = await loadAll();
+  const totals = computeTotals(
+    records,
+    payments,
+    expenses,
+    period,
+    vendorPayments,
+  );
 
   return (
     <div>
@@ -65,12 +71,23 @@ export default async function ProfitLossPage({
           <div className="stat-label">Total Expenses</div>
           <div className="stat-value">{formatPKR(totals.totalExpenses)}</div>
         </div>
+        <div className="card">
+          <div className="stat-label">Vendor payments</div>
+          <div className="stat-value">
+            {formatPKR(totals.totalVendorPayments)}
+          </div>
+          <div className="note">
+            Paid to vendors in this period. Counted as an expense.
+          </div>
+        </div>
         <div className="card accent-blue">
           <div className="stat-label">
             {totals.profit >= 0 ? "Profit" : "Loss"}
           </div>
           <div className="stat-value">{formatPKR(totals.profit)}</div>
-          <div className="note">Received minus expenses.</div>
+          <div className="note">
+            Received minus expenses minus vendor payments.
+          </div>
         </div>
       </div>
 
