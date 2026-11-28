@@ -56,6 +56,12 @@ export interface FinanceRecord {
   /** Tour / city name. Only used when type = 'tour'. */
   tour_name: string | null;
   total_amount: number;
+  /** The vendor this record was bought from, if any. */
+  vendor_id: string | null;
+  /** The vendor's reference number for this purchase. */
+  vendor_reference: string | null;
+  /** What the business paid (or owes) the vendor for this record. */
+  vendor_cost: number | null;
   /** Umrah component. Only used when type = 'combined'. */
   umrah_amount: number | null;
   /** Ticket component. Only used when type = 'combined'. */
@@ -93,6 +99,33 @@ export interface Expense {
   created_at: string;
 }
 
+/** A vendor (supplier) the business buys tickets / packages from. */
+export interface Vendor {
+  id: string;
+  name: string;
+  company_name: string | null;
+  phone: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A payment made to a vendor for a finance record's vendor cost. */
+export interface VendorPayment {
+  id: string;
+  finance_record_id: string;
+  vendor_id: string;
+  amount: number;
+  /** YYYY-MM-DD */
+  payment_date: string;
+  method: PaymentMethod | null;
+  reference: string | null;
+  note: string | null;
+  status: "active" | "voided";
+  void_reason: string | null;
+  voided_at: string | null;
+  created_at: string;
+}
+
 export interface Profile {
   id: string;
   email: string;
@@ -106,6 +139,14 @@ export interface RecordWithTotals extends FinanceRecord {
   payments: Payment[];
   received: number;
   pending: number;
+  /** The vendor this record was bought from, if any. */
+  vendor: Vendor | null;
+  /** Active vendor payments made for this record. */
+  vendorPaid: number;
+  /** Still owed to the vendor for this record (never negative). */
+  vendorPending: number;
+  /** total_amount − vendor_cost when a vendor cost exists, else null. */
+  vendorProfit: number | null;
 }
 
 export interface TypeTotals {
@@ -118,6 +159,8 @@ export interface Totals {
   totalReceived: number;
   totalPending: number;
   totalExpenses: number;
+  /** Active vendor payments in the period (counted as expense in P&L). */
+  totalVendorPayments: number;
   profit: number;
   byType: Record<FinanceType, TypeTotals>;
 }

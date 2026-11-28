@@ -4,8 +4,9 @@
 //
 //   received = sum of ACTIVE payments only (voided payments excluded)
 //   pending  = total_amount - received
-//   profit   = total received - total expenses
+//   profit   = total received - total expenses - vendor payments
 //   pending is NEVER counted as profit.
+//   vendor pending is a liability in the vendor ledger only, never in P&L.
 
 import type {
   Customer,
@@ -16,6 +17,8 @@ import type {
   RecordWithTotals,
   ReminderItem,
   Totals,
+  Vendor,
+  VendorPayment,
 } from "./types";
 import { FINANCE_TYPES } from "./types";
 import { addDays, daysBetween, todayPKT } from "./format";
@@ -48,11 +51,34 @@ export function isFullyPaid(
   return recordPending(record, payments) === 0;
 }
 
+/** Sum of ACTIVE vendor payments only (voided payments excluded). */
+export function sumActiveVendorPayments(payments: VendorPayment[]): number {
+  return payments
+    .filter((p) => p.status === "active")
+    .reduce((sum, p) => sum + p.amount, 0);
+}
+
+/**
+ * Still owed to the vendor for a record: vendor_cost minus active vendor
+ * payments, never negative. 0 when the record has no vendor cost.
+ */
+export function vendorPendingFor(
+  record: FinanceRecord,
+  vendorPayments: VendorPayment[],
+): number {
+  return Math.max(
+    0,
+    (record.vendor_cost ?? 0) - sumActiveVendorPayments(vendorPayments),
+  );
+}
+
 /** Join records with customers + payments and attach received/pending. */
 export function withTotals(
   records: FinanceRecord[],
   customersById: Map<string, Customer>,
   paymentsByRecord: Map<string, Payment[]>,
+  vendorsById: Map<string, Vendor> = new Map(),
+  vendorPaymentsByRecord: Map<string, VendorPayment[]> = new Map(),
 ): RecordWithTotals[] {
   return records.map((record) => {
     const customer = customersById.get(record.customer_id);
@@ -63,12 +89,25 @@ export function withTotals(
     const payments = (paymentsByRecord.get(record.id) ?? []).slice().sort(
       (a, b) => (a.payment_date < b.payment_date ? 1 : -1),
     );
+    const vendorPayments = (
+      vendorPaymentsByRecord.get(record.id) ?? []
+    ).slice().sort((a, b) => (a.payment_date < b.payment_date ? 1 : -1));
+    const vendor = record.vendor_id
+      ? (vendorsById.get(record.vendor_id) ?? null)
+      : null;
     return {
       ...record,
       customer,
       payments,
       received: sumActivePayments(payments),
       pending: recordPending(record, payments),
+      vendor,
+      vendorPaid: sumActiveVendorPayments(vendorPayments),
+      vendorPending: vendorPendingFor(record, vendorPayments),
+      vendorProfit:
+        record.vendor_cost != null
+          ? record.total_amount - record.vendor_cost
+          : null,
     };
   });
 }
@@ -91,14 +130,16 @@ export const PERIOD_LABELS: Record<Period, string> = {
 };
 
 /**
- * Totals for a period. Received and expenses are period-filtered;
- * pending is always the CURRENT outstanding balance (not period-filtered).
+ * Totals for a period. Received, expenses and vendor payments are
+ * period-filtered; pending is always the CURRENT outstanding balance
+ * (not period-filtered). Vendor payments count as expense in P&L.
  */
 export function computeTotals(
   records: RecordWithTotals[],
   allPayments: Payment[],
   expenses: Expense[],
   period: Period,
+  vendorPayments: VendorPayment[] = [],
 ): Totals {
   const byType = {} as Record<FinanceType, { received: number; pending: number; count: number }>;
   for (const t of FINANCE_TYPES) byType[t] = { received: 0, pending: 0, count: 0 };
@@ -123,11 +164,19 @@ export function computeTotals(
     if (inPeriod(e.expense_date, period)) totalExpenses += e.amount;
   }
 
+  let totalVendorPayments = 0;
+  for (const p of vendorPayments) {
+    if (p.status !== "active") continue;
+    if (!inPeriod(p.payment_date, period)) continue;
+    totalVendorPayments += p.amount;
+  }
+
   return {
     totalReceived,
     totalPending,
     totalExpenses,
-    profit: totalReceived - totalExpenses,
+    totalVendorPayments,
+    profit: totalReceived - totalExpenses - totalVendorPayments,
     byType,
   };
 }
