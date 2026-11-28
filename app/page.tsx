@@ -8,8 +8,8 @@ import { FINANCE_TYPE_LABELS } from "@/lib/types";
 
 export default async function DashboardPage() {
   await requireAdmin();
-  const { records, payments, expenses } = await loadAll();
-  const totals = computeTotals(records, payments, expenses, "all");
+  const { records, payments, expenses, vendorPayments } = await loadAll();
+  const totals = computeTotals(records, payments, expenses, "all", vendorPayments);
   const reminders = getReminders(records);
 
   return (
