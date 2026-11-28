@@ -177,6 +177,21 @@ export async function createRecord(formData: FormData): Promise<ActionResult> {
       return fail("Tour / city name is required.");
     }
 
+    // Vendor (optional): empty id / cost = none. A chosen vendor must exist.
+    const vendorId = str(formData, "vendor_id") || null;
+    if (vendorId) {
+      const vendor = await store.getVendor(vendorId);
+      if (!vendor) return fail("Selected vendor not found.");
+    }
+    const vendorCostRaw = str(formData, "vendor_cost");
+    let vendorCost: number | null = null;
+    if (vendorCostRaw) {
+      vendorCost = num(formData, "vendor_cost");
+      if (!Number.isFinite(vendorCost) || vendorCost < 0) {
+        return fail("Vendor cost must be zero or more.");
+      }
+    }
+
     if (type === "combined") {
       const umrah = num(formData, "umrah_amount");
       const ticket = num(formData, "ticket_amount");
@@ -194,6 +209,9 @@ export async function createRecord(formData: FormData): Promise<ActionResult> {
         umrah_amount: umrah,
         ticket_amount: ticket,
         next_payment_date: nextPaymentDate || null,
+        vendor_id: vendorId,
+        vendor_reference: str(formData, "vendor_reference") || null,
+        vendor_cost: vendorCost,
       });
       revalidateRecordPages(type, record.id);
       return { ok: true, id: record.id };
@@ -209,6 +227,9 @@ export async function createRecord(formData: FormData): Promise<ActionResult> {
       tour_name: type === "tour" ? str(formData, "tour_name") : null,
       total_amount: total,
       next_payment_date: nextPaymentDate || null,
+      vendor_id: vendorId,
+      vendor_reference: str(formData, "vendor_reference") || null,
+      vendor_cost: vendorCost,
     });
     revalidateRecordPages(type, record.id);
     return { ok: true, id: record.id };
@@ -350,6 +371,37 @@ export async function updateRecord(formData: FormData): Promise<ActionResult> {
     if (record.type === "tour" && !str(formData, "tour_name")) {
       return fail("Tour / city name is required.");
     }
+    // Vendor fields: only applied when the form sends them, so older
+    // edit forms without vendor inputs never wipe vendor data.
+    // Empty id / cost = none; a chosen vendor must exist.
+    const vendorPatch: {
+      vendor_id?: string | null;
+      vendor_reference?: string | null;
+      vendor_cost?: number | null;
+    } = {};
+    if (formData.has("vendor_id")) {
+      const vendorId = str(formData, "vendor_id") || null;
+      if (vendorId) {
+        const vendor = await store.getVendor(vendorId);
+        if (!vendor) return fail("Selected vendor not found.");
+      }
+      vendorPatch.vendor_id = vendorId;
+    }
+    if (formData.has("vendor_reference")) {
+      vendorPatch.vendor_reference = str(formData, "vendor_reference") || null;
+    }
+    if (formData.has("vendor_cost")) {
+      const vendorCostRaw = str(formData, "vendor_cost");
+      if (vendorCostRaw) {
+        const vendorCost = num(formData, "vendor_cost");
+        if (!Number.isFinite(vendorCost) || vendorCost < 0) {
+          return fail("Vendor cost must be zero or more.");
+        }
+        vendorPatch.vendor_cost = vendorCost;
+      } else {
+        vendorPatch.vendor_cost = null;
+      }
+    }
     let updated;
     if (record.type === "combined") {
       const umrah = num(formData, "umrah_amount");
@@ -362,6 +414,7 @@ export async function updateRecord(formData: FormData): Promise<ActionResult> {
         umrah_amount: umrah,
         ticket_amount: ticket,
         next_payment_date: nextPaymentDate || null,
+        ...vendorPatch,
       });
     } else {
       const total = num(formData, "total_amount");
@@ -374,10 +427,143 @@ export async function updateRecord(formData: FormData): Promise<ActionResult> {
           record.type === "tour" ? str(formData, "tour_name") : undefined,
         total_amount: total,
         next_payment_date: nextPaymentDate || null,
+        ...vendorPatch,
       });
     }
     revalidateRecordPages(updated.type, updated.id);
     return { ok: true, id: updated.id };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Vendors
+// ---------------------------------------------------------------------------
+
+export async function createVendor(
+  formData: FormData,
+): Promise<ActionResult> {
+  await requireAdmin();
+  const name = str(formData, "name");
+  if (!name) return fail("Vendor name is required.");
+  try {
+    const vendor = await getStore().createVendor({
+      name,
+      company_name: str(formData, "company_name") || null,
+      phone: str(formData, "phone") || null,
+    });
+    revalidatePath("/vendors");
+    revalidatePath("/");
+    return { ok: true, id: vendor.id };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
+
+export async function deleteVendor(
+  formData: FormData,
+): Promise<ActionResult> {
+  await requireAdmin();
+  const vendorId = str(formData, "vendor_id") || str(formData, "id");
+  if (!vendorId) return fail("Vendor is required.");
+  try {
+    await getStore().deleteVendor(vendorId);
+    revalidatePath("/vendors");
+    revalidatePath("/");
+    return { ok: true };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
+
+export async function updateVendor(
+  formData: FormData,
+): Promise<ActionResult> {
+  await requireAdmin();
+  const vendorId = str(formData, "vendor_id") || str(formData, "id");
+  if (!vendorId) return fail("Vendor is required.");
+  const name = str(formData, "name");
+  if (!name) return fail("Vendor name is required.");
+  try {
+    await getStore().updateVendor(vendorId, {
+      name,
+      company_name: str(formData, "company_name") || null,
+      phone: str(formData, "phone") || null,
+    });
+    revalidatePath("/vendors");
+    revalidatePath("/");
+    revalidatePath("/tickets");
+    revalidatePath("/umrah");
+    revalidatePath("/combined");
+    revalidatePath("/tours");
+    return { ok: true };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Vendor payments
+// ---------------------------------------------------------------------------
+
+export async function addVendorPayment(
+  formData: FormData,
+): Promise<ActionResult> {
+  await requireAdmin();
+  const recordId = str(formData, "finance_record_id") || str(formData, "record_id");
+  if (!recordId) return fail("Record is required.");
+  const amount = num(formData, "amount");
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return fail("Vendor payment amount must be more than zero.");
+  }
+  const paymentDate = str(formData, "payment_date") || todayPKT();
+  if (!isDate(paymentDate)) return fail("Payment date must be a valid date.");
+  const method = str(formData, "method") as PaymentMethod;
+  if (method && !PAYMENT_METHODS.includes(method)) {
+    return fail("Please choose a valid payment method.");
+  }
+  try {
+    const store = getStore();
+    const record = await store.getRecord(recordId);
+    if (!record) return fail("Record not found.");
+    // The store throws when the record has no vendor / no vendor cost,
+    // and on overpayment — surface its message as-is.
+    const payment = await store.addVendorPayment({
+      finance_record_id: recordId,
+      amount,
+      payment_date: paymentDate,
+      method: method || null,
+      reference: str(formData, "reference") || null,
+      note: str(formData, "note") || null,
+    });
+    revalidateRecordPages(record.type, recordId);
+    revalidatePath("/vendors");
+    return { ok: true, id: payment.id };
+  } catch (err) {
+    return fail(errorMessage(err));
+  }
+}
+
+export async function voidVendorPayment(
+  formData: FormData,
+): Promise<ActionResult> {
+  await requireAdmin();
+  const paymentId = str(formData, "vendor_payment_id") || str(formData, "id");
+  if (!paymentId) return fail("Vendor payment is required.");
+  const reason = str(formData, "reason") || str(formData, "void_reason");
+  if (!reason) return fail("A reason is required to void a vendor payment.");
+  try {
+    const store = getStore();
+    const all = await store.listVendorPayments();
+    const payment = all.find((p) => p.id === paymentId);
+    if (!payment) return fail("Vendor payment not found.");
+    await store.voidVendorPayment(paymentId, reason);
+    const record = await store.getRecord(payment.finance_record_id);
+    if (record) revalidateRecordPages(record.type, record.id);
+    revalidatePath("/vendors");
+    revalidatePath("/profit-loss");
+    return { ok: true };
   } catch (err) {
     return fail(errorMessage(err));
   }
