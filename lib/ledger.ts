@@ -121,8 +121,8 @@ export function buildLedger(
   const rows: LedgerRow[] = [
     {
       date: periodFrom,
-      type: "—",
-      transNo: "—",
+      type: "-",
+      transNo: "-",
       particulars: "Previous Balance",
       invRef: "",
       rate: "1.00",

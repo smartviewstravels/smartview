@@ -176,7 +176,9 @@ export default async function StatementPage({
           <tbody>
             {ledger.rows.map((r, i) => (
               <tr key={i}>
-                <td style={td("center")}>{formatDate(r.date)}</td>
+                <td style={{ ...td("center"), whiteSpace: "nowrap" }}>
+                  {formatDate(r.date)}
+                </td>
                 <td style={td("center")}>{r.type}</td>
                 <td style={td("center")}>{r.transNo}</td>
                 <td style={td("left")}>{r.particulars}</td>
