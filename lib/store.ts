@@ -24,8 +24,10 @@ import type {
   Payment,
   PaymentMethod,
   Profile,
+  Vendor,
+  VendorPayment,
 } from "./types";
-import { sumActivePayments } from "./calc";
+import { sumActivePayments, sumActiveVendorPayments } from "./calc";
 
 export function isSupabaseConfigured(): boolean {
   return Boolean(
@@ -48,9 +50,21 @@ export interface CreateRecordInput {
   /** Required when type = 'combined'. */
   ticket_amount?: number | null;
   next_payment_date?: string | null;
+  vendor_id?: string | null;
+  vendor_reference?: string | null;
+  vendor_cost?: number | null;
 }
 
 export interface AddPaymentInput {
+  finance_record_id: string;
+  amount: number;
+  payment_date: string; // YYYY-MM-DD
+  method?: PaymentMethod | null;
+  reference?: string | null;
+  note?: string | null;
+}
+
+export interface AddVendorPaymentInput {
   finance_record_id: string;
   amount: number;
   payment_date: string; // YYYY-MM-DD
@@ -87,6 +101,8 @@ export interface Store {
    * Edit a record (correct a wrong entry). Changing the total is
    * refused when the new total is less than the amount already
    * received — that money is real and must be voided first.
+   * Changing the vendor cost is refused the same way: the new cost
+   * may not be less than the amount already paid to the vendor.
    */
   updateRecord(
     id: string,
@@ -97,12 +113,17 @@ export interface Store {
       umrah_amount?: number | null;
       ticket_amount?: number | null;
       next_payment_date?: string | null;
+      vendor_id?: string | null;
+      vendor_reference?: string | null;
+      vendor_cost?: number | null;
     },
   ): Promise<FinanceRecord>;
   /**
    * Delete a record. Refuses when the record has received (active)
    * payments — void those first, so received money never vanishes
-   * silently from profit. Voided payments are removed with the record.
+   * silently from profit. Also refuses when the record has active
+   * vendor payments. Voided payments (client and vendor) are removed
+   * with the record.
    */
   deleteRecord(id: string): Promise<void>;
 
@@ -140,6 +161,33 @@ export interface Store {
   ): Promise<Customer>;
 
   listProfiles(): Promise<Profile[]>;
+
+  listVendors(): Promise<Vendor[]>;
+  getVendor(id: string): Promise<Vendor | null>;
+  createVendor(data: {
+    name: string;
+    company_name?: string | null;
+    phone?: string | null;
+  }): Promise<Vendor>;
+  /**
+   * Delete a vendor. Refuses when the vendor still has finance
+   * records — delete those first, so no record loses its vendor.
+   */
+  deleteVendor(id: string): Promise<void>;
+  /** Edit a vendor (name, company name, phone). */
+  updateVendor(
+    id: string,
+    data: {
+      name: string;
+      company_name?: string | null;
+      phone?: string | null;
+    },
+  ): Promise<Vendor>;
+
+  listVendorPayments(recordId?: string): Promise<VendorPayment[]>;
+  listVendorPaymentsByVendor(vendorId: string): Promise<VendorPayment[]>;
+  addVendorPayment(data: AddVendorPaymentInput): Promise<VendorPayment>;
+  voidVendorPayment(id: string, reason: string): Promise<VendorPayment>;
 }
 
 export function getStore(): Store {
@@ -155,6 +203,8 @@ export interface LocalDb {
   finance_records: FinanceRecord[];
   payments: Payment[];
   expenses: Expense[];
+  vendors: Vendor[];
+  vendor_payments: VendorPayment[];
   profiles: Profile[];
   /** Demo admin login for local mode ONLY. Never used with Supabase. */
   local_admin: {
@@ -173,6 +223,8 @@ export function emptyLocalDb(): LocalDb {
     finance_records: [],
     payments: [],
     expenses: [],
+    vendors: [],
+    vendor_payments: [],
     profiles: [],
     local_admin: null,
     sessions: [],
@@ -308,8 +360,19 @@ class LocalStore implements Store {
         "This record has received payments. Void the payments first, then delete the record.",
       );
     }
+    const vendorPayments = db.vendor_payments.filter(
+      (p) => p.finance_record_id === id,
+    );
+    if (sumActiveVendorPayments(vendorPayments) > 0) {
+      throw new Error(
+        "This record has vendor payments. Void the vendor payments first, then delete the record.",
+      );
+    }
     // Only voided payments can remain — remove them with the record.
     db.payments = db.payments.filter((p) => p.finance_record_id !== id);
+    db.vendor_payments = db.vendor_payments.filter(
+      (p) => p.finance_record_id !== id,
+    );
     db.finance_records.splice(index, 1);
     await writeLocalDb(db);
   }
@@ -323,6 +386,9 @@ class LocalStore implements Store {
       umrah_amount?: number | null;
       ticket_amount?: number | null;
       next_payment_date?: string | null;
+      vendor_id?: string | null;
+      vendor_reference?: string | null;
+      vendor_cost?: number | null;
     },
   ): Promise<FinanceRecord> {
     const db = await readLocalDb();
@@ -357,6 +423,47 @@ class LocalStore implements Store {
       record.tour_name = data.tour_name?.trim() || null;
     if (data.next_payment_date !== undefined)
       record.next_payment_date = data.next_payment_date || null;
+    // Vendor cost guard (mirrors the total/received guard): the new cost
+    // may not be less than the amount already paid to the vendor, and it
+    // may not be removed while vendor payments exist.
+    const vendorPayments = db.vendor_payments.filter(
+      (p) => p.finance_record_id === id,
+    );
+    const vendorPaid = sumActiveVendorPayments(vendorPayments);
+    const newVendorCost =
+      data.vendor_cost !== undefined
+        ? data.vendor_cost
+        : record.vendor_cost;
+    if (newVendorCost !== null && newVendorCost !== undefined) {
+      if (newVendorCost < 0)
+        throw new Error("Vendor cost cannot be negative.");
+      if (newVendorCost < vendorPaid) {
+        throw new Error(
+          `Vendor cost cannot be less than the amount already paid to the vendor (PKR ${Math.round(vendorPaid).toLocaleString("en-PK")}). Void a vendor payment first if the vendor cost is wrong.`,
+        );
+      }
+    } else if (vendorPaid > 0) {
+      throw new Error(
+        "This record has vendor payments. Void the vendor payments first, then remove the vendor cost.",
+      );
+    }
+    // The vendor may not change while vendor payments exist — those
+    // payments belong to the vendor on the record.
+    if (
+      data.vendor_id !== undefined &&
+      data.vendor_id !== record.vendor_id &&
+      vendorPayments.length > 0
+    ) {
+      throw new Error(
+        "This record has vendor payments. Void the vendor payments first, then change the vendor.",
+      );
+    }
+    if (data.vendor_id !== undefined)
+      record.vendor_id = data.vendor_id || null;
+    if (data.vendor_reference !== undefined)
+      record.vendor_reference = data.vendor_reference?.trim() || null;
+    if (data.vendor_cost !== undefined)
+      record.vendor_cost = data.vendor_cost;
     record.updated_at = nowISO();
     syncRecordStatus(db, record);
     await writeLocalDb(db);
@@ -424,6 +531,142 @@ class LocalStore implements Store {
       (r) => r.id === payment.finance_record_id,
     );
     if (record) syncRecordStatus(db, record);
+    await writeLocalDb(db);
+    return payment;
+  }
+
+  async listVendors(): Promise<Vendor[]> {
+    const db = await readLocalDb();
+    return db.vendors.slice().sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async getVendor(id: string): Promise<Vendor | null> {
+    const db = await readLocalDb();
+    return db.vendors.find((v) => v.id === id) ?? null;
+  }
+
+  async createVendor(data: {
+    name: string;
+    company_name?: string | null;
+    phone?: string | null;
+  }): Promise<Vendor> {
+    const db = await readLocalDb();
+    const vendor: Vendor = {
+      id: randomUUID(),
+      name: data.name.trim(),
+      company_name: data.company_name?.trim() || null,
+      phone: data.phone?.trim() || null,
+      created_at: nowISO(),
+      updated_at: nowISO(),
+    };
+    db.vendors.push(vendor);
+    await writeLocalDb(db);
+    return vendor;
+  }
+
+  async deleteVendor(id: string): Promise<void> {
+    const db = await readLocalDb();
+    const index = db.vendors.findIndex((v) => v.id === id);
+    if (index === -1) throw new Error("Vendor not found.");
+    if (db.finance_records.some((r) => r.vendor_id === id)) {
+      throw new Error(
+        "This vendor has finance records. Delete those records first.",
+      );
+    }
+    db.vendors.splice(index, 1);
+    await writeLocalDb(db);
+  }
+
+  async updateVendor(
+    id: string,
+    data: {
+      name: string;
+      company_name?: string | null;
+      phone?: string | null;
+    },
+  ): Promise<Vendor> {
+    const db = await readLocalDb();
+    const vendor = db.vendors.find((v) => v.id === id);
+    if (!vendor) throw new Error("Vendor not found.");
+    vendor.name = data.name.trim();
+    vendor.company_name = data.company_name?.trim() || null;
+    vendor.phone = data.phone?.trim() || null;
+    vendor.updated_at = nowISO();
+    await writeLocalDb(db);
+    return vendor;
+  }
+
+  async listVendorPayments(recordId?: string): Promise<VendorPayment[]> {
+    const db = await readLocalDb();
+    const rows = recordId
+      ? db.vendor_payments.filter((p) => p.finance_record_id === recordId)
+      : db.vendor_payments;
+    return rows.slice().sort(sortVendorPayments);
+  }
+
+  async listVendorPaymentsByVendor(
+    vendorId: string,
+  ): Promise<VendorPayment[]> {
+    const db = await readLocalDb();
+    return db.vendor_payments
+      .filter((p) => p.vendor_id === vendorId)
+      .slice()
+      .sort(sortVendorPayments);
+  }
+
+  async addVendorPayment(
+    data: AddVendorPaymentInput,
+  ): Promise<VendorPayment> {
+    const db = await readLocalDb();
+    const record = db.finance_records.find(
+      (r) => r.id === data.finance_record_id,
+    );
+    if (!record) throw new Error("Record not found.");
+    if (!record.vendor_id)
+      throw new Error(
+        "This record has no vendor. Add a vendor to the record first.",
+      );
+    if (record.vendor_cost == null)
+      throw new Error(
+        "This record has no vendor cost. Add a vendor cost to the record first.",
+      );
+    const existing = db.vendor_payments.filter(
+      (p) => p.finance_record_id === record.id,
+    );
+    assertVendorPaymentAllowed(record, existing, data.amount);
+    const payment: VendorPayment = {
+      id: randomUUID(),
+      finance_record_id: record.id,
+      vendor_id: record.vendor_id,
+      amount: data.amount,
+      payment_date: data.payment_date,
+      method: data.method ?? null,
+      reference: data.reference?.trim() || null,
+      note: data.note?.trim() || null,
+      status: "active",
+      void_reason: null,
+      voided_at: null,
+      created_at: nowISO(),
+    };
+    db.vendor_payments.push(payment);
+    await writeLocalDb(db);
+    return payment;
+  }
+
+  async voidVendorPayment(
+    id: string,
+    reason: string,
+  ): Promise<VendorPayment> {
+    const db = await readLocalDb();
+    const payment = db.vendor_payments.find((p) => p.id === id);
+    if (!payment) throw new Error("Vendor payment not found.");
+    if (payment.status === "voided")
+      throw new Error("This vendor payment is already voided.");
+    if (!reason.trim())
+      throw new Error("A reason is required to void a vendor payment.");
+    payment.status = "voided";
+    payment.void_reason = reason.trim();
+    payment.voided_at = nowISO();
     await writeLocalDb(db);
     return payment;
   }
@@ -502,6 +745,13 @@ function buildRecord(data: CreateRecordInput): FinanceRecord {
   if (!data.customer_id) throw new Error("Customer is required.");
   if (data.type === "tour" && !data.tour_name?.trim())
     throw new Error("Tour / city name is required.");
+  if (data.vendor_cost !== undefined && data.vendor_cost !== null) {
+    if (data.vendor_cost < 0)
+      throw new Error("Vendor cost cannot be negative.");
+  }
+  const vendor_id = data.vendor_id || null;
+  const vendor_reference = data.vendor_reference?.trim() || null;
+  const vendor_cost = data.vendor_cost ?? null;
   if (data.type === "combined") {
     const umrah = data.umrah_amount ?? 0;
     const ticket = data.ticket_amount ?? 0;
@@ -518,6 +768,9 @@ function buildRecord(data: CreateRecordInput): FinanceRecord {
       umrah_amount: umrah,
       ticket_amount: ticket,
       next_payment_date: data.next_payment_date || null,
+      vendor_id,
+      vendor_reference,
+      vendor_cost,
       status: "open",
       created_at: nowISO(),
       updated_at: nowISO(),
@@ -534,6 +787,9 @@ function buildRecord(data: CreateRecordInput): FinanceRecord {
     umrah_amount: null,
     ticket_amount: null,
     next_payment_date: data.next_payment_date || null,
+    vendor_id,
+    vendor_reference,
+    vendor_cost,
     status: "open",
     created_at: nowISO(),
     updated_at: nowISO(),
@@ -553,6 +809,35 @@ function assertPaymentAllowed(
   if (amount > remaining) {
     throw new Error(
       `Payment of PKR ${Math.round(amount).toLocaleString("en-PK")} is more than the remaining balance of PKR ${Math.round(remaining).toLocaleString("en-PK")}. Overpayments are blocked.`,
+    );
+  }
+}
+
+/** Newest vendor payment first (same ordering as client payments). */
+function sortVendorPayments(a: VendorPayment, b: VendorPayment): number {
+  return a.payment_date === b.payment_date
+    ? a.created_at < b.created_at
+      ? 1
+      : -1
+    : a.payment_date < b.payment_date
+      ? 1
+      : -1;
+}
+
+/** Overpayment rule for vendors: a vendor payment may never exceed the
+ *  amount still owed to the vendor (vendor_cost − active vendor payments). */
+function assertVendorPaymentAllowed(
+  record: FinanceRecord,
+  existing: VendorPayment[],
+  amount: number,
+): void {
+  if (!Number.isFinite(amount) || amount <= 0)
+    throw new Error("Vendor payment amount must be more than zero.");
+  const remaining =
+    (record.vendor_cost ?? 0) - sumActiveVendorPayments(existing);
+  if (amount > remaining) {
+    throw new Error(
+      `Vendor payment of PKR ${Math.round(amount).toLocaleString("en-PK")} is more than the remaining vendor balance of PKR ${Math.round(remaining).toLocaleString("en-PK")}. Overpayments are blocked.`,
     );
   }
 }
@@ -713,6 +998,12 @@ class SupabaseStore implements Store {
         "This record has received payments. Void the payments first, then delete the record.",
       );
     }
+    const vendorPayments = await this.listVendorPayments(id);
+    if (sumActiveVendorPayments(vendorPayments) > 0) {
+      throw new Error(
+        "This record has vendor payments. Void the vendor payments first, then delete the record.",
+      );
+    }
     // Only voided payments can remain — remove them first, then the
     // record (no reliance on a DB cascade).
     const { error: payError } = await sb
@@ -720,6 +1011,11 @@ class SupabaseStore implements Store {
       .delete()
       .eq("finance_record_id", id);
     if (payError) throw new Error(payError.message);
+    const { error: vendorPayError } = await sb
+      .from("vendor_payments")
+      .delete()
+      .eq("finance_record_id", id);
+    if (vendorPayError) throw new Error(vendorPayError.message);
     const { error } = await sb.from("finance_records").delete().eq("id", id);
     if (error) throw new Error(error.message);
   }
@@ -733,6 +1029,9 @@ class SupabaseStore implements Store {
       umrah_amount?: number | null;
       ticket_amount?: number | null;
       next_payment_date?: string | null;
+      vendor_id?: string | null;
+      vendor_reference?: string | null;
+      vendor_cost?: number | null;
     },
   ): Promise<FinanceRecord> {
     const record = await this.getRecord(id);
@@ -767,6 +1066,45 @@ class SupabaseStore implements Store {
       patch.tour_name = data.tour_name?.trim() || null;
     if (data.next_payment_date !== undefined)
       patch.next_payment_date = data.next_payment_date || null;
+    // Vendor cost guard (mirrors the total/received guard): the new cost
+    // may not be less than the amount already paid to the vendor, and it
+    // may not be removed while vendor payments exist.
+    const vendorPayments = await this.listVendorPayments(id);
+    const vendorPaid = sumActiveVendorPayments(vendorPayments);
+    const newVendorCost =
+      data.vendor_cost !== undefined
+        ? data.vendor_cost
+        : record.vendor_cost;
+    if (newVendorCost !== null && newVendorCost !== undefined) {
+      if (newVendorCost < 0)
+        throw new Error("Vendor cost cannot be negative.");
+      if (newVendorCost < vendorPaid) {
+        throw new Error(
+          `Vendor cost cannot be less than the amount already paid to the vendor (PKR ${Math.round(vendorPaid).toLocaleString("en-PK")}). Void a vendor payment first if the vendor cost is wrong.`,
+        );
+      }
+    } else if (vendorPaid > 0) {
+      throw new Error(
+        "This record has vendor payments. Void the vendor payments first, then remove the vendor cost.",
+      );
+    }
+    // The vendor may not change while vendor payments exist — those
+    // payments belong to the vendor on the record.
+    if (
+      data.vendor_id !== undefined &&
+      data.vendor_id !== record.vendor_id &&
+      vendorPayments.length > 0
+    ) {
+      throw new Error(
+        "This record has vendor payments. Void the vendor payments first, then change the vendor.",
+      );
+    }
+    if (data.vendor_id !== undefined)
+      patch.vendor_id = data.vendor_id || null;
+    if (data.vendor_reference !== undefined)
+      patch.vendor_reference = data.vendor_reference?.trim() || null;
+    if (data.vendor_cost !== undefined)
+      patch.vendor_cost = data.vendor_cost;
     patch.updated_at = new Date().toISOString();
     const { data: row, error } = await supabaseAdmin()
       .from("finance_records")
@@ -840,6 +1178,173 @@ class SupabaseStore implements Store {
     if (error) throw new Error(error.message);
     await this.syncStatus((row as Payment).finance_record_id);
     return row as Payment;
+  }
+
+  async listVendors(): Promise<Vendor[]> {
+    const { data, error } = await supabaseAdmin()
+      .from("vendors")
+      .select("*")
+      .order("name", { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as Vendor[];
+  }
+
+  async getVendor(id: string): Promise<Vendor | null> {
+    const { data, error } = await supabaseAdmin()
+      .from("vendors")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return (data as Vendor | null) ?? null;
+  }
+
+  async createVendor(data: {
+    name: string;
+    company_name?: string | null;
+    phone?: string | null;
+  }): Promise<Vendor> {
+    const { data: row, error } = await supabaseAdmin()
+      .from("vendors")
+      .insert({
+        name: data.name.trim(),
+        company_name: data.company_name?.trim() || null,
+        phone: data.phone?.trim() || null,
+      })
+      .select("*")
+      .single();
+    if (error) throw new Error(error.message);
+    return row as Vendor;
+  }
+
+  async deleteVendor(id: string): Promise<void> {
+    const sb = supabaseAdmin();
+    const vendor = await this.getVendor(id);
+    if (!vendor) throw new Error("Vendor not found.");
+    const { data: records, error: readError } = await sb
+      .from("finance_records")
+      .select("id")
+      .eq("vendor_id", id)
+      .limit(1);
+    if (readError) throw new Error(readError.message);
+    if ((records ?? []).length > 0) {
+      throw new Error(
+        "This vendor has finance records. Delete those records first.",
+      );
+    }
+    const { error } = await sb.from("vendors").delete().eq("id", id);
+    if (error) throw new Error(error.message);
+  }
+
+  async updateVendor(
+    id: string,
+    data: {
+      name: string;
+      company_name?: string | null;
+      phone?: string | null;
+    },
+  ): Promise<Vendor> {
+    const { data: row, error } = await supabaseAdmin()
+      .from("vendors")
+      .update({
+        name: data.name.trim(),
+        company_name: data.company_name?.trim() || null,
+        phone: data.phone?.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw new Error(error.message);
+    return row as Vendor;
+  }
+
+  async listVendorPayments(recordId?: string): Promise<VendorPayment[]> {
+    let q = supabaseAdmin()
+      .from("vendor_payments")
+      .select("*")
+      .order("payment_date", { ascending: false })
+      .order("created_at", { ascending: false });
+    if (recordId) q = q.eq("finance_record_id", recordId);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return (data ?? []) as VendorPayment[];
+  }
+
+  async listVendorPaymentsByVendor(
+    vendorId: string,
+  ): Promise<VendorPayment[]> {
+    const { data, error } = await supabaseAdmin()
+      .from("vendor_payments")
+      .select("*")
+      .eq("vendor_id", vendorId)
+      .order("payment_date", { ascending: false })
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as VendorPayment[];
+  }
+
+  async addVendorPayment(
+    data: AddVendorPaymentInput,
+  ): Promise<VendorPayment> {
+    const sb = supabaseAdmin();
+    const record = await this.getRecord(data.finance_record_id);
+    if (!record) throw new Error("Record not found.");
+    if (!record.vendor_id)
+      throw new Error(
+        "This record has no vendor. Add a vendor to the record first.",
+      );
+    if (record.vendor_cost == null)
+      throw new Error(
+        "This record has no vendor cost. Add a vendor cost to the record first.",
+      );
+    const existing = await this.listVendorPayments(record.id);
+    assertVendorPaymentAllowed(record, existing, data.amount);
+    const { data: row, error } = await sb
+      .from("vendor_payments")
+      .insert({
+        finance_record_id: record.id,
+        vendor_id: record.vendor_id,
+        amount: data.amount,
+        payment_date: data.payment_date,
+        method: data.method ?? null,
+        reference: data.reference?.trim() || null,
+        note: data.note?.trim() || null,
+        status: "active",
+      })
+      .select("*")
+      .single();
+    if (error) throw new Error(error.message);
+    return row as VendorPayment;
+  }
+
+  async voidVendorPayment(
+    id: string,
+    reason: string,
+  ): Promise<VendorPayment> {
+    if (!reason.trim())
+      throw new Error("A reason is required to void a vendor payment.");
+    const { data: existing, error: readError } = await supabaseAdmin()
+      .from("vendor_payments")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (!existing) throw new Error("Vendor payment not found.");
+    if ((existing as VendorPayment).status === "voided")
+      throw new Error("This vendor payment is already voided.");
+    const { data: row, error } = await supabaseAdmin()
+      .from("vendor_payments")
+      .update({
+        status: "voided",
+        void_reason: reason.trim(),
+        voided_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw new Error(error.message);
+    return row as VendorPayment;
   }
 
   /** 'paid' when the remaining balance is zero, 'open' otherwise. */
