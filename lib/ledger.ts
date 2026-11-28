@@ -139,8 +139,19 @@ export function buildLedger(
     totalDebit += entry.debit;
     totalCredit += entry.credit;
     running += entry.debit - entry.credit;
-    const { kind: _kind, ...row } = entry;
-    rows.push({ ...row, balance: running });
+    // Build the row field by field so the internal `kind` never leaks
+    // into the pushed row.
+    rows.push({
+      date: entry.date,
+      type: entry.type,
+      transNo: entry.transNo,
+      particulars: entry.particulars,
+      invRef: entry.invRef,
+      rate: entry.rate,
+      debit: entry.debit,
+      credit: entry.credit,
+      balance: running,
+    });
   }
 
   return {
