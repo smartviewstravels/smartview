@@ -447,12 +447,13 @@ class LocalStore implements Store {
         "This record has vendor payments. Void the vendor payments first, then remove the vendor cost.",
       );
     }
-    // The vendor may not change while vendor payments exist — those
-    // payments belong to the vendor on the record.
+    // The vendor may not change while ACTIVE vendor payments exist — those
+    // payments belong to the vendor on the record. Voided payments do not
+    // block the change (they carry no money).
     if (
       data.vendor_id !== undefined &&
       data.vendor_id !== record.vendor_id &&
-      vendorPayments.length > 0
+      vendorPaid > 0
     ) {
       throw new Error(
         "This record has vendor payments. Void the vendor payments first, then change the vendor.",
@@ -1088,12 +1089,13 @@ class SupabaseStore implements Store {
         "This record has vendor payments. Void the vendor payments first, then remove the vendor cost.",
       );
     }
-    // The vendor may not change while vendor payments exist — those
-    // payments belong to the vendor on the record.
+    // The vendor may not change while ACTIVE vendor payments exist — those
+    // payments belong to the vendor on the record. Voided payments do not
+    // block the change (they carry no money).
     if (
       data.vendor_id !== undefined &&
       data.vendor_id !== record.vendor_id &&
-      vendorPayments.length > 0
+      vendorPaid > 0
     ) {
       throw new Error(
         "This record has vendor payments. Void the vendor payments first, then change the vendor.",
